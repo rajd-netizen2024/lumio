@@ -1,0 +1,6 @@
+.venv/
+pyvenv.cfg
+*.exe
+.venv\Lib\site-packages
+.venv\Scripts
+*.pyc
