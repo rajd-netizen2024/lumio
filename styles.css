@@ -90,43 +90,46 @@ a {
 .banner #shop-now {
   border: 1px solid black;
   padding: 20px;
-  border-radius: 10px;
+  border-radius: 20px;
 }
 
 .banner #categories {
   border: 1px solid black;
   padding: 20px;
-  border-radius: 10px;
+  border-radius: 20px;
 }
 
 .main-content {
-  padding: 40px;
+  padding: 10px;
 }
 
 .main-content h1 {
   margin: auto;
   text-align: center;
   font-size: 45px;
-  padding: 30px;
+  padding: 20px;
   margin-top: 5%;
 }
 
-.main-content .rows {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 200px;
-  width: 80%;
-  margin: auto;
-  padding: 40px;
-  justify-content: space-between;
+.rows {
+  padding: 60px;
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 100px;
 }
 
-.main-content>.rows>.col {
+.rows div {
+  display: flex;
+  flex-direction: column;
   align-items: center;
 }
 
-.main-content>.rows>.col>img {
-  height: 100px;
-  width: 100px;
+.rows img {
+  height: 190px;
+  width: 200px;
 }
 
+.rows h2 {
+  font-size:25px;
+}
