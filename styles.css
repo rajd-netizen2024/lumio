@@ -87,6 +87,10 @@ a {
   padding: 30px;
 }
 
+.banner > h1,.banner>h2 {
+  background: transparent;
+}
+
 .banner #shop-now {
   border: 1px solid black;
   padding: 20px;

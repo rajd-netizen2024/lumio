@@ -150,6 +150,12 @@ a {
     
 }
 
-.feature > h2, svg {
+.feature > h2,.feature-icons {
     color:#2A0878;
+}
+
+.wide-range, .easy, .accurate, .experience {
+    border: 1px;
+    border-radius: 10px;
+    background-color: dark;
 }
