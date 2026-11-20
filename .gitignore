@@ -224,3 +224,19 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# Environment variables
+.env
+.env.*
+
+# SSL certificates and keys
+certs/
+*.pem
+*.key
+*.crt
+
+# Python
+venv/
+__pycache__/
+*.pyc
