@@ -28,6 +28,14 @@
       },
     };
 
+    // Abort if the server accepts the request but never answers (stuck backend / DB),
+    // so pages show an error instead of spinning forever.
+    const controller = new AbortController();
+    const timeoutMs = options.timeoutMs || 15000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    config.signal = controller.signal;
+    delete config.timeoutMs;
+
     try {
       const response = await fetch(url, config);
 
@@ -38,20 +46,48 @@
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        const errorDetail =
-          data && data.detail
-            ? typeof data.detail === "string"
-              ? data.detail
-              : JSON.stringify(data.detail)
-            : `Request failed with status ${response.status}`;
-        throw new Error(errorDetail);
+        throw new Error(formatErrorDetail(data, response.status));
       }
 
       return data;
     } catch (err) {
+      if (err && err.name === "AbortError") {
+        const timeoutErr = new Error(
+          `The server did not respond within ${Math.round(timeoutMs / 1000)}s. ` +
+          "The backend or its database connection looks stuck (check the uvicorn terminal)."
+        );
+        console.warn(`[LUMIO API Timeout: ${endpoint}]`);
+        throw timeoutErr;
+      }
+      if (err instanceof TypeError) {
+        // fetch() rejects with TypeError when the server is unreachable / CORS blocked
+        const netErr = new Error(
+          "Network error: the backend is not running, or it crashed on this request (check the uvicorn terminal for a traceback)."
+        );
+        console.warn(`[LUMIO API Error: ${endpoint}]`, err);
+        throw netErr;
+      }
       console.warn(`[LUMIO API Error: ${endpoint}]`, err);
       throw err;
+    } finally {
+      clearTimeout(timer);
     }
+  }
+
+  // FastAPI sends { detail: "text" } for HTTPException and
+  // { detail: [{ loc, msg, type }, ...] } for 422 validation errors.
+  function formatErrorDetail(data, status) {
+    const detail = data && data.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail.length) {
+      return detail
+        .map((d) => {
+          const field = Array.isArray(d.loc) ? d.loc.filter((p) => p !== "body").join(".") : "";
+          return field ? `${field}: ${d.msg}` : d.msg;
+        })
+        .join("; ");
+    }
+    return `Request failed with status ${status}`;
   }
 
   // ==========================================
@@ -127,6 +163,122 @@
 
     async getUser(id) {
       return request(`/users/${id}`);
+    },
+
+    // Retailers
+    async getRetailers() {
+      return request("/retailers/");
+    },
+
+    async getRetailerByUser(userId) {
+      return request(`/retailers/by-user/${userId}`);
+    },
+
+    async createRetailer(data) {
+      return request("/retailers/", { method: "POST", body: JSON.stringify(data) });
+    },
+
+    async updateRetailer(id, data) {
+      return request(`/retailers/${id}`, { method: "PUT", body: JSON.stringify(data) });
+    },
+
+    async deleteRetailer(id) {
+      return request(`/retailers/${id}`, { method: "DELETE" });
+    },
+
+    // Addresses
+    async getAddressesByUser(userId) {
+      return request(`/addresses/?user_id=${userId}`);
+    },
+
+    async createAddress(data) {
+      return request("/addresses/", { method: "POST", body: JSON.stringify(data) });
+    },
+
+    async updateAddress(id, data) {
+      return request(`/addresses/${id}`, { method: "PUT", body: JSON.stringify(data) });
+    },
+
+    async deleteAddress(id) {
+      return request(`/addresses/${id}`, { method: "DELETE" });
+    },
+
+    // Inventory
+    async getInventory() {
+      return request("/inventory/");
+    },
+
+    async getInventoryByProduct(productId) {
+      return request(`/inventory/product/${productId}`);
+    },
+
+    async createInventory(data) {
+      return request("/inventory/", { method: "POST", body: JSON.stringify(data) });
+    },
+
+    async updateInventory(id, data) {
+      return request(`/inventory/${id}`, { method: "PUT", body: JSON.stringify(data) });
+    },
+
+    // Cart (DB-backed)
+    // Every cart method except clearCart resolves to a full CartResponse:
+    //   { id, user_id, created_at, updated_at,
+    //     items: [{ id, cart_id, product_id, quantity, created_at, product: ProductResponse }] }
+    // clearCart resolves to null (HTTP 204).
+    // Errors are thrown as Error(message) using the backend `detail` text, e.g.
+    //   409 "Only 3 unit(s) of 'X' available", 404 "Cart item not found".
+    async getCart(userId) {
+      return request(`/cart/${userId}`);
+    },
+
+    async addToCart(userId, productId, quantity = 1) {
+      return request(`/cart/${userId}/items`, {
+        method: "POST",
+        body: JSON.stringify({ product_id: productId, quantity }),
+      });
+    },
+
+    async updateCartItem(userId, itemId, quantity) {
+      return request(`/cart/${userId}/items/${itemId}`, {
+        method: "PUT",
+        body: JSON.stringify({ quantity }),
+      });
+    },
+
+    async removeCartItem(userId, itemId) {
+      return request(`/cart/${userId}/items/${itemId}`, { method: "DELETE" });
+    },
+
+    async clearCart(userId) {
+      return request(`/cart/${userId}/clear`, { method: "DELETE" });
+    },
+
+    // Orders
+    // createOrder / getOrder / updateOrderStatus resolve to an OrderResponse:
+    //   { id, user_id, address_id, total_amount, status, created_at, updated_at,
+    //     items: [{ id, order_id, product_id|null, quantity, unit_price, product|null }] }
+    // createOrder empties the cart server-side (stock is reduced in the same transaction).
+    async createOrder(userId, addressId = null) {
+      return request("/orders/", {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId, address_id: addressId }),
+      });
+    },
+
+    async getOrders(userId = null) {
+      const qs = userId ? `?user_id=${userId}` : "";
+      return request(`/orders/${qs}`);
+    },
+
+    async getOrder(orderId) {
+      return request(`/orders/${orderId}`);
+    },
+
+    async updateOrderStatus(orderId, orderStatus) {
+      return request(`/orders/${orderId}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status: orderStatus }),
+      });
     },
   };
 
@@ -262,4 +414,127 @@
       };
     },
   };
+
+  // ==========================================
+  // Cart Sync (DB cart for logged-in users, localStorage for guests)
+  // ==========================================
+  // LumioCart (above) stays the guest/localStorage cart. LumioCartSync is the
+  // single entry point the UI should use so both modes behave the same, and it
+  // keeps the header badge count correct.
+  let serverCount = null; // null = not loaded yet / guest
+  let syncPromise = Promise.resolve();
+
+  function countFromCart(cart) {
+    const items = cart && cart.items ? cart.items : [];
+    return items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+  }
+
+  function notifyCartChanged() {
+    const count = window.LumioCart.getCount();
+    window.dispatchEvent(
+      new CustomEvent("lumio:cart_updated", { detail: { count, source: "sync" } })
+    );
+    // lumio-ui.js listens for this event and redraws the header badge.
+  }
+
+  // Make getCount() mode-aware so existing header code that already calls
+  // LumioCart.getCount() shows the DB count for logged-in users.
+  const localGetCount = window.LumioCart.getCount.bind(window.LumioCart);
+  window.LumioCart.getCount = function () {
+    if (window.LumioAuth.isLoggedIn() && serverCount !== null) return serverCount;
+    return localGetCount();
+  };
+
+  window.LumioCartSync = {
+    /** Call with every CartResponse you receive so the badge stays in sync. */
+    setServerCart(cart) {
+      serverCount = countFromCart(cart);
+      notifyCartChanged();
+    },
+
+    /** Add a product (logged in -> backend, guest -> localStorage). */
+    async add(product, qty = 1) {
+      const user = window.LumioAuth.getUser();
+      if (!user) {
+        window.LumioCart.addItem(product, qty);
+        return { mode: "local" };
+      }
+      const cart = await window.LumioAPI.addToCart(user.id, product.id, qty);
+      this.setServerCart(cart);
+      return { mode: "server", cart };
+    },
+
+    /** Re-read the cart from the backend and update the badge. */
+    async refresh() {
+      const user = window.LumioAuth.getUser();
+      if (!user) {
+        serverCount = null;
+        notifyCartChanged();
+        return null;
+      }
+      const cart = await window.LumioAPI.getCart(user.id);
+      this.setServerCart(cart);
+      return cart;
+    },
+
+    /** Resolves when any login/logout sync in progress has finished. */
+    whenSynced() {
+      return syncPromise;
+    },
+
+    /** After login: push guest cart items into the DB cart, then clear the guest cart. */
+    async mergeGuestCart(user) {
+      const guestItems = window.LumioCart.getItems();
+      if (!guestItems.length) return { merged: 0, skipped: 0 };
+      let merged = 0;
+      let skipped = 0;
+      for (const item of guestItems) {
+        try {
+          await window.LumioAPI.addToCart(user.id, item.id, item.qty || 1);
+          merged++;
+        } catch (err) {
+          skipped++; // e.g. out of stock or product deleted
+          console.warn("[LUMIO] Could not merge guest cart item", item.id, err.message);
+        }
+      }
+      window.LumioCart.clear();
+      return { merged, skipped };
+    },
+  };
+
+  // Keep everything in sync when the user logs in / out, and on page load.
+  window.addEventListener("lumio:auth_changed", (e) => {
+    const user = e.detail && e.detail.user;
+    serverCount = null;
+    if (!user) {
+      syncPromise = Promise.resolve();
+      notifyCartChanged();
+      return;
+    }
+    syncPromise = (async () => {
+      try {
+        const result = await window.LumioCartSync.mergeGuestCart(user);
+        if (window.LumioUI && window.LumioUI.toast) {
+          if (result.merged) {
+            window.LumioUI.toast(`${result.merged} item(s) from your guest cart added to your account cart`, "success");
+          }
+          if (result.skipped) {
+            window.LumioUI.toast(
+              `${result.skipped} item(s) from your guest cart couldn't be added (stock/availability).`,
+              "error"
+            );
+          }
+        }
+        await window.LumioCartSync.refresh();
+      } catch (err) {
+        console.warn("[LUMIO] Cart sync after login failed:", err.message);
+      }
+    })();
+  });
+
+  if (window.LumioAuth.isLoggedIn()) {
+    syncPromise = window.LumioCartSync.refresh().catch((err) => {
+      console.warn("[LUMIO] Initial cart load failed:", err.message);
+    });
+  }
 })();

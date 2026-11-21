@@ -4,6 +4,13 @@
  */
 
 (function () {
+  // Escape user/DB-supplied text before putting it into innerHTML
+  function esc(str) {
+    return String(str == null ? "" : str).replace(/[&<>"']/g, (ch) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+    ));
+  }
+
   // Toast Notification System
   function showToast(message, type = "success") {
     let container = document.querySelector(".lumio-toast-container");
@@ -21,10 +28,10 @@
         ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`
         : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
 
-    toast.innerHTML = `
-      ${iconSvg}
-      <span>${message}</span>
-    `;
+    toast.innerHTML = iconSvg;
+    const msgEl = document.createElement("span");
+    msgEl.textContent = message; // text only: messages can contain product names
+    toast.appendChild(msgEl);
 
     container.appendChild(toast);
 
@@ -104,22 +111,22 @@
       container.innerHTML = `
         <div class="user-profile-card">
           <div class="user-profile-avatar">${initials}</div>
-          <h4 class="user-profile-name">${user.full_name}</h4>
-          <p class="user-profile-email">${user.email}</p>
+          <h4 class="user-profile-name">${esc(user.full_name)}</h4>
+          <p class="user-profile-email">${esc(user.email)}</p>
           <div class="user-profile-meta">
             <span class="profile-tag role-${user.role.toLowerCase()}">
               ★ ${user.role.toUpperCase()}
             </span>
-            ${user.phone ? `<span class="profile-tag">📞 ${user.phone}</span>` : ""}
+            ${user.phone ? `<span class="profile-tag">📞 ${esc(user.phone)}</span>` : ""}
             <span class="profile-tag">ID: #${user.id}</span>
           </div>
 
           ${
             isRetailer
               ? `
-              <div style="margin: 20px 0; padding: 16px; background: #fdf4ff; border: 1px solid #f0abfc; border-radius: 12px; text-align: left;">
+              <div style="margin: 16px 0 8px; padding: 14px; background: #fdf4ff; border: 1px solid #f0abfc; border-radius: 12px; text-align: left;">
                 <h5 style="color: #86198f; font-size: 0.95rem; margin-bottom: 8px; font-weight: 700;">🏪 Retailer Controls</h5>
-                <p style="font-size: 0.82rem; color: #701a75; margin-bottom: 12px;">Add new inventory or manage existing products in the Aiven PostgreSQL database.</p>
+                <p style="font-size: 0.82rem; color: #701a75; margin-bottom: 12px;">Add inventory or manage existing products in the database.</p>
                 <div style="display: flex; gap: 8px;">
                   <button class="lumio-btn lumio-btn-primary lumio-btn-sm" id="btn-show-add-product" style="flex: 1;">
                     ➕ Add Product
@@ -134,7 +141,12 @@
               : ""
           }
 
-          <div style="margin-top: 24px; display: flex; gap: 10px;">
+          <div style="margin: 10px 0 8px; padding: 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; text-align: left;">
+            <h5 style="color: #166534; font-size: 0.88rem; margin-bottom: 8px; font-weight: 700;">📍 My Addresses</h5>
+            <div id="address-manager-area"><p style="font-size:0.82rem;color:#64748b;">Loading addresses...</p></div>
+          </div>
+
+          <div style="margin-top: 16px; display: flex; gap: 10px;">
             <button class="lumio-btn lumio-btn-danger" id="btn-logout">
               Sign Out
             </button>
@@ -156,6 +168,9 @@
           .getElementById("btn-show-manage-products")
           .addEventListener("click", renderManageProductsTable);
       }
+
+      // Load addresses into the address manager panel
+      renderAddressManager(user.id);
     } else {
       // User is logged out: show sign in / sign up forms
       container.innerHTML = `
@@ -460,8 +475,8 @@
                 (p) => `
               <tr id="row-prod-${p.id}">
                 <td>#${p.id}</td>
-                <td><strong>${p.name}</strong></td>
-                <td>${p.category}</td>
+                <td><strong>${esc(p.name)}</strong></td>
+                <td>${esc(p.category)}</td>
                 <td>₹${Number(p.price).toLocaleString()}</td>
                 <td>${p.stock_quantity}</td>
                 <td>
@@ -497,14 +512,98 @@
       });
     } catch (err) {
       document.getElementById("retailer-table-container").innerHTML = `
-        <p style="color: #ef4444; font-size: 0.85rem;">Error loading products: ${err.message}</p>
+        <p style="color: #ef4444; font-size: 0.85rem;">Error loading products: ${esc(err.message)}</p>
       `;
     }
   }
 
-  // Update Header Badges & User Status
+  // Address Manager (inside auth modal profile view)
+  async function renderAddressManager(userId) {
+    const area = document.getElementById("address-manager-area");
+    if (!area) return;
+
+    area.innerHTML = `<p style="font-size:0.82rem;color:#64748b;">Loading...</p>`;
+
+    try {
+      const addresses = await window.LumioAPI.getAddressesByUser(userId);
+
+      if (!addresses || !addresses.length) {
+        area.innerHTML = `
+          <p style="font-size:0.82rem;color:#64748b;margin-bottom:6px;">No saved addresses.</p>
+          <button type="button" class="lumio-btn lumio-btn-secondary lumio-btn-sm" id="btn-add-addr">+ Add Address</button>
+          <div id="add-addr-form-area"></div>`;
+      } else {
+        area.innerHTML = `
+          <div id="addr-list" style="margin-bottom:6px;">
+            ${addresses.map(a => `
+              <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:6px 10px;margin-bottom:4px;font-size:0.82rem;">
+                <span>📍 ${esc(a.street)}, ${esc(a.city)} – ${esc(a.pincode)}</span>
+                <button type="button" data-addr-id="${a.id}" class="lumio-btn lumio-btn-danger lumio-btn-sm btn-del-addr" style="padding:1px 7px;font-size:0.74rem;">✕</button>
+              </div>`).join("")}
+          </div>
+          <button type="button" class="lumio-btn lumio-btn-secondary lumio-btn-sm" id="btn-add-addr">+ Add Address</button>
+          <div id="add-addr-form-area"></div>`;
+
+        area.querySelectorAll(".btn-del-addr").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const addrId = btn.getAttribute("data-addr-id");
+            if (!confirm("Remove this address?")) return;
+            try {
+              await window.LumioAPI.deleteAddress(addrId);
+              showToast("Address removed", "success");
+              renderAddressManager(userId);
+            } catch (err) {
+              showToast(err.message || "Failed to remove address", "error");
+            }
+          });
+        });
+      }
+
+      // Add address form toggle
+      document.getElementById("btn-add-addr")?.addEventListener("click", () => {
+        const formArea = document.getElementById("add-addr-form-area");
+        if (!formArea) return;
+        if (formArea.innerHTML) { formArea.innerHTML = ""; return; }
+        formArea.innerHTML = `
+          <form id="modal-addr-form" style="margin-top:8px;">
+            <input type="text" id="modal-addr-street" placeholder="Street / Flat / Area" required
+              style="width:100%;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:0.82rem;margin-bottom:5px;box-sizing:border-box;">
+            <div style="display:flex;gap:5px;margin-bottom:5px;">
+              <input type="text" id="modal-addr-city" placeholder="City" required
+                style="flex:1;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:0.82rem;">
+              <input type="text" id="modal-addr-pincode" placeholder="Pincode" required
+                style="width:80px;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:0.82rem;">
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button type="submit" class="lumio-btn lumio-btn-primary lumio-btn-sm" style="flex:1;">Save</button>
+              <button type="button" id="cancel-modal-addr" class="lumio-btn lumio-btn-secondary lumio-btn-sm">Cancel</button>
+            </div>
+          </form>`;
+        document.getElementById("cancel-modal-addr")?.addEventListener("click", () => { formArea.innerHTML = ""; });
+        document.getElementById("modal-addr-form")?.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          try {
+            await window.LumioAPI.createAddress({
+              user_id: userId,
+              street: document.getElementById("modal-addr-street").value.trim(),
+              city: document.getElementById("modal-addr-city").value.trim(),
+              pincode: document.getElementById("modal-addr-pincode").value.trim(),
+            });
+            showToast("Address saved!", "success");
+            renderAddressManager(userId);
+          } catch (err) {
+            showToast(err.message || "Failed to save address", "error");
+          }
+        });
+      });
+    } catch (err) {
+      area.innerHTML = `<p style="font-size:0.82rem;color:#ef4444;">Could not load addresses.</p>`;
+    }
+  }
+
+  // Update Header Badges & User Status — prefer DB cart count for logged-in users, else localStorage
   function updateHeaderUI() {
-    // 1. Cart Badge
+    // 1. Cart Badge — prefer DB cart count for logged-in users, else localStorage
     const cartLinks = document.querySelectorAll(
       ".header .icons a[href*='cart.html'], .links a[href*='cart.html']"
     );
@@ -543,7 +642,7 @@
         }
         if (rawSvg) rawSvg.style.display = "none";
         pill.innerHTML = `
-          <span>👤 ${currentUser.full_name.split(" ")[0]}</span>
+          <span>👤 ${esc(currentUser.full_name.split(" ")[0])}</span>
           <span class="user-role-badge">${currentUser.role}</span>
         `;
         pill.title = `Logged in as ${currentUser.full_name} (${currentUser.role})`;
@@ -573,11 +672,11 @@
     return `
       <div class="card" data-id="${product.id}" data-price="${product.price}">
         <div class="card-media">
-          <img src="${imgUrl}" alt="${product.name}" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500';">
+          <img src="${esc(imgUrl)}" alt="${esc(product.name)}" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500';">
         </div>
         <div class="card-info">
-          <h3>${product.name}</h3>
-          ${product.brand ? `<p style="font-size: 0.78rem; color: #6b7280; margin-bottom: 4px;">Brand: ${product.brand}</p>` : ""}
+          <h3>${esc(product.name)}</h3>
+          ${product.brand ? `<p style="font-size: 0.78rem; color: #6b7280; margin-bottom: 4px;">Brand: ${esc(product.brand)}</p>` : ""}
           <div class="price">
             ₹${Number(product.price).toLocaleString()}
             ${
@@ -592,7 +691,9 @@
             <span class="score">4.8</span>
             <span class="count">(${product.stock_quantity + 15} reviews)</span>
           </div>
-          <button class="cart-btn" type="button" ${!isAvail ? "disabled style='opacity:0.6; cursor:not-allowed;'" : ""}>
+          <button class="cart-btn" type="button"
+            data-product-id="${product.id}"
+            ${!isAvail ? "disabled style='opacity:0.6; cursor:not-allowed;'" : ""}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
             </svg>
@@ -602,6 +703,42 @@
       </div>
     `;
   }
+
+  // Fallback "Add to Cart" handler for cards on pages that don't run catalog.js.
+  // catalog.js binds its own handler (it has the full product) and calls preventDefault(),
+  // so we skip those clicks here to avoid adding the item twice.
+  document.addEventListener("click", async (e) => {
+    if (e.defaultPrevented) return;
+    const btn = e.target.closest(".cart-btn[data-product-id]");
+    if (!btn || btn.disabled) return;
+
+    const productId = parseInt(btn.getAttribute("data-product-id"), 10);
+    const card = btn.closest(".card");
+    const productData = {
+      id: productId,
+      name: card?.querySelector("h3")?.textContent || "Product",
+      price: parseFloat(card?.getAttribute("data-price") || "0"),
+      image_url: card?.querySelector("img")?.src || "",
+      category: "",
+      brand: "",
+    };
+
+    btn.disabled = true;
+    btn.style.opacity = "0.7";
+    try {
+      // Logged in -> POST /cart/{user}/items; guest -> localStorage. Badge updates via event.
+      const result = await window.LumioCartSync.add(productData, 1);
+      showToast(
+        result.mode === "local" ? "Added to cart! Sign in to save your cart." : "Added to cart!",
+        "success"
+      );
+    } catch (err) {
+      showToast(err.message || "Failed to add to cart", "error");
+    } finally {
+      btn.disabled = false;
+      btn.style.opacity = "";
+    }
+  });
 
   // Setup Event Listeners
   window.addEventListener("DOMContentLoaded", () => {

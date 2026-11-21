@@ -7,6 +7,12 @@
   let allProducts = [];
   let currentCategory = null;
 
+  function escapeHtml(str) {
+    return String(str == null ? "" : str).replace(/[&<>"']/g, (ch) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+    ));
+  }
+
   // Determine active category from data-attribute, URL parameter, or page title
   function getActiveCategory() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -65,7 +71,7 @@
       grid.innerHTML = `
         <div class="lumio-empty-state">
           <h3>Unable to connect to backend</h3>
-          <p>${err.message}</p>
+          <p>${escapeHtml(err.message)}</p>
           <button class="lumio-btn lumio-btn-primary lumio-btn-sm" style="margin-top:14px;" onclick="window.location.reload()">
             Retry Connection
           </button>
@@ -129,10 +135,27 @@
       const btn = card.querySelector(".cart-btn");
 
       if (btn && product) {
-        btn.onclick = (e) => {
+        btn.onclick = async (e) => {
           e.preventDefault();
-          window.LumioCart.addItem(product, 1);
-          window.LumioUI.toast(`Added "${product.name}" to cart!`, "success");
+          if (btn.disabled) return; // ignore double-clicks while a request is in flight
+
+          if (product.is_available === false || Number(product.stock_quantity) <= 0) {
+            window.LumioUI.toast(`"${product.name}" is out of stock.`, "error");
+            return;
+          }
+
+          btn.disabled = true;
+          try {
+            // Logged in -> POST /cart/{user}/items (header badge updated by LumioCartSync)
+            // Guest     -> localStorage cart
+            await window.LumioCartSync.add(product, 1);
+            window.LumioUI.toast(`Added "${product.name}" to cart!`, "success");
+          } catch (err) {
+            // e.g. 409 "Only 3 unit(s) of 'X' available"
+            window.LumioUI.toast(err.message || "Could not add to cart", "error");
+          } finally {
+            btn.disabled = false;
+          }
         };
       }
     });
