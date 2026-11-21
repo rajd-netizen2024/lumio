@@ -272,6 +272,8 @@ class NearestRetailerItem(BaseModel):
     contact: str
     stock_quantity: int
     distance_km: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class NearestRetailersResponse(BaseModel):

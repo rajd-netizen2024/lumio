@@ -31,6 +31,31 @@
     });
   }
 
+  // index.html ships this modal in its markup; category pages may not. Create it on demand so
+  // "Find in nearby stores" works on every page that loads catalog.js.
+  function ensureNearestRetailersModal() {
+    if (document.getElementById("lumio-nearest-retailers-modal")) return;
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = `
+      <div id="lumio-nearest-retailers-modal"
+        style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+        <div style="background:#fff; color:#0f172a; max-width:520px; width:100%; border-radius:12px; padding:20px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+            <h3 id="lumio-nr-title" style="margin:0; font-size:1.1rem;">Nearby Offline Stores</h3>
+            <button type="button" id="lumio-nr-close"
+              style="border:none; background:#f1f5f9; border-radius:6px; padding:6px 10px; cursor:pointer; font-weight:600;">✕</button>
+          </div>
+          <p id="lumio-nr-status" style="margin:10px 0; font-size:0.9rem; color:#475569;"></p>
+          <div id="lumio-nr-list" style="display:flex; flex-direction:column; gap:10px; max-height:320px; overflow-y:auto;"></div>
+          <div style="margin-top:14px; display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" id="lumio-nr-retry-loc"
+              style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer;">Use My Location</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrapper.firstElementChild);
+  }
+
   function closeNearestRetailersModal() {
     const modal = document.getElementById("lumio-nearest-retailers-modal");
     if (modal) modal.style.display = "none";
@@ -38,6 +63,7 @@
   }
 
   async function openNearestRetailersModal(product, forceLocation = false) {
+    ensureNearestRetailersModal();
     const modal = document.getElementById("lumio-nearest-retailers-modal");
     const titleEl = document.getElementById("lumio-nr-title");
     const statusEl = document.getElementById("lumio-nr-status");
@@ -51,13 +77,15 @@
     listEl.innerHTML = "";
 
     const coords = await getUserCoords(forceLocation ? 7000 : 3000);
+    if (activeFallbackProduct !== product) return; // modal was closed or another product opened
 
     try {
       const data = await window.LumioAPI.getNearestRetailers(product.id, coords || {});
+      if (activeFallbackProduct !== product) return;
       const stores = Array.isArray(data.retailers) ? data.retailers : [];
 
       if (!stores.length) {
-        statusEl.textContent = "No nearby offline stores currently have stock for this item.";
+        statusEl.textContent = "No partner store has this item in stock right now. Please check back soon.";
         return;
       }
 
@@ -79,6 +107,7 @@
             <div style="font-size:0.84rem; margin-top:6px;">
               In stock: <strong>${escapeHtml(s.stock_quantity)}</strong> · Contact: ${escapeHtml(s.contact || "N/A")}
             </div>
+            ${storeActionsHtml(s)}
           </div>
         `
         )
@@ -86,6 +115,25 @@
     } catch (err) {
       statusEl.textContent = `Could not fetch nearby stores: ${err.message}`;
     }
+  }
+
+  // "Get directions" (Google Maps) and "Call" links for a store card.
+  function storeActionsHtml(s) {
+    const lat = Number(s.latitude);
+    const lon = Number(s.longitude);
+    const phone = String(s.contact || "").replace(/[^\d+]/g, "");
+    const linkStyle =
+      "display:inline-block; padding:6px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.82rem; font-weight:600; color:#3C1A8D; text-decoration:none;";
+    const links = [];
+    if (s.latitude != null && s.longitude != null && Number.isFinite(lat) && Number.isFinite(lon)) {
+      links.push(
+        `<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}" target="_blank" rel="noopener noreferrer" style="${linkStyle}">Get directions</a>`
+      );
+    }
+    if (phone.replace(/\D/g, "").length >= 7) {
+      links.push(`<a href="tel:${escapeHtml(phone)}" style="${linkStyle}">Call store</a>`);
+    }
+    return links.length ? `<div style="display:flex; gap:8px; margin-top:10px;">${links.join("")}</div>` : "";
   }
 
   function getSearchQuery() {
@@ -220,6 +268,22 @@
       const btn = card.querySelector(".cart-btn");
 
       if (btn && product) {
+        // Out-of-stock cards come from lumio-ui.js with a `disabled` button, and a disabled button
+        // never fires click events. Re-enable it here and relabel it, so clicking it opens the
+        // "nearby stores" modal instead of doing nothing.
+        const isOutOfStock = product.is_available === false || Number(product.stock_quantity) <= 0;
+        if (isOutOfStock) {
+          btn.disabled = false;
+          btn.removeAttribute("disabled");
+          btn.style.opacity = "1";
+          btn.style.cursor = "pointer";
+          btn.title = "Out of stock online. Click to find stores that have it.";
+          const labelNode = Array.from(btn.childNodes).find(
+            (n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim()
+          );
+          if (labelNode) labelNode.textContent = " Find in Nearby Stores";
+        }
+
         btn.onclick = async (e) => {
           e.preventDefault();
           if (btn.disabled) return;
@@ -290,6 +354,7 @@
     }
 
     // Nearest-retailers modal controls
+    ensureNearestRetailersModal();
     const nrClose = document.getElementById("lumio-nr-close");
     const nrRetry = document.getElementById("lumio-nr-retry-loc");
     const nrModal = document.getElementById("lumio-nearest-retailers-modal");
