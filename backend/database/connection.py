@@ -1,8 +1,7 @@
-
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text, URL
+from sqlalchemy import create_engine, text, URL, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 # Search for .env in backend/ or root LUMIO/ directory
@@ -49,11 +48,37 @@ else:
     )
 
 # Create engine for Aiven PostgreSQL
+# Without timeouts, an unreachable or half-dead connection makes psycopg2 wait for the OS
+# TCP timeout (many minutes), so every request just "loads forever". These make it fail fast.
+# (No `options=-c ...` here: Aiven's connection pooler rejects startup options.)
 engine = create_engine(
     db_target,
     pool_pre_ping=True,
     pool_recycle=300,
+    pool_size=5,
+    max_overflow=5,
+    pool_timeout=10,          # wait max 10s for a free pooled connection
+    connect_args={
+        "connect_timeout": 10,        # give up connecting after 10s
+        "keepalives": 1,              # detect dead TCP connections
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 3,
+        "tcp_user_timeout": 15000,    # ms; abort if sent data isn't acknowledged
+    },
 )
+
+# Per-connection safety nets (plain SET commands, so they also work through Aiven's pooler):
+# a query stuck behind someone else's lock now errors after 10s instead of hanging forever,
+# and the error (with the culprit query) shows up in the uvicorn terminal.
+@event.listens_for(engine, "connect")
+def _set_session_timeouts(dbapi_conn, _record):
+    cur = dbapi_conn.cursor()
+    cur.execute("SET lock_timeout = '10s'")
+    cur.execute("SET statement_timeout = '30s'")
+    cur.close()
+    dbapi_conn.commit()
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -69,6 +94,7 @@ def get_db():
 
 def test_connection():
     try:
+        print("Connecting to Aiven PostgreSQL (10s timeout)...")
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
             print("Successfully connected to Aiven PostgreSQL!")
