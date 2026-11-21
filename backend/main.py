@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import text, or_
+from sqlalchemy import text, or_, inspect as sa_inspect
 from services.search import (
     search_products_opensearch,
     index_product_document,
@@ -50,6 +50,7 @@ from database.schemas import (
     OrderCreate,
     OrderStatusUpdate,
     OrderResponse,
+    NearestRetailersResponse,
 )
 
 # Project root directory
@@ -234,9 +235,92 @@ def seed_products_if_needed():
         db.close()
 
 
+def add_missing_columns():
+    """
+    Tables that existed before the models gained new columns are not altered by create_all().
+    Compare every model table with the live database and ADD (never alter/drop) missing columns.
+    """
+    try:
+        insp = sa_inspect(engine)
+        existing_tables = set(insp.get_table_names())
+        with engine.begin() as conn:
+            conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+            for table in Base.metadata.sorted_tables:
+                if table.name not in existing_tables:
+                    continue
+                have = {c["name"] for c in insp.get_columns(table.name)}
+                for col in table.columns:
+                    if col.name in have:
+                        continue
+                    coltype = col.type.compile(dialect=engine.dialect)
+                    default_sql = None
+                    if col.server_default is not None:
+                        arg = getattr(col.server_default, "arg", None)
+                        if hasattr(arg, "compile"):
+                            default_sql = str(arg.compile(dialect=engine.dialect))
+                        elif arg is not None:
+                            default_sql = "'" + str(arg).replace("'", "''") + "'"
+                    elif col.default is not None and getattr(col.default, "is_scalar", False):
+                        v = col.default.arg
+                        if isinstance(v, bool):
+                            default_sql = "TRUE" if v else "FALSE"
+                        elif isinstance(v, (int, float)):
+                            default_sql = str(v)
+                        else:
+                            default_sql = "'" + str(v).replace("'", "''") + "'"
+                    ddl = f'ALTER TABLE "{table.name}" ADD COLUMN IF NOT EXISTS "{col.name}" {coltype}'
+                    if default_sql is not None:
+                        ddl += f" DEFAULT {default_sql}"
+                        if not col.nullable:
+                            ddl += " NOT NULL"
+                    conn.execute(text(ddl))
+                    print(f"Added missing column: {table.name}.{col.name}")
+    except Exception as e:
+        print(f"WARNING: add_missing_columns skipped ({type(e).__name__}): {e}")
+
+
+def migrate_inventory_per_retailer():
+    """
+    `inventory` used to hold ONE row per product (UNIQUE product_id). It now holds one row per
+    (retailer, product) = what each physical store has on its shelves. Existing databases still
+    carry the old UNIQUE(product_id), which would stop a second store from stocking the same
+    product, so drop it and add UNIQUE(retailer_id, product_id) instead.
+    """
+    try:
+        insp = sa_inspect(engine)
+        if "inventory" not in insp.get_table_names():
+            return
+        with engine.begin() as conn:
+            conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+            for uc in insp.get_unique_constraints("inventory"):
+                if list(uc.get("column_names") or []) == ["product_id"] and uc.get("name"):
+                    conn.execute(text(f'ALTER TABLE inventory DROP CONSTRAINT IF EXISTS "{uc["name"]}"'))
+                    print(f"Dropped old unique constraint inventory.{uc['name']} (product_id)")
+            for ix in insp.get_indexes("inventory"):
+                if (ix.get("unique") and list(ix.get("column_names") or []) == ["product_id"]
+                        and not ix.get("duplicates_constraint") and ix.get("name")):
+                    conn.execute(text(f'DROP INDEX IF EXISTS "{ix["name"]}"'))
+                    print(f"Dropped old unique index {ix['name']} (product_id)")
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_inventory_retailer_product "
+                "ON inventory (retailer_id, product_id)"
+            ))
+    except Exception as e:
+        print(f"WARNING: inventory migration skipped ({type(e).__name__}): {e}")
+
+
+def reindex_products(products) -> None:
+    """Keep the OpenSearch copy of stock/availability in step with PostgreSQL (best effort)."""
+    for p in products:
+        try:
+            index_product_document(_product_to_search_doc(p))
+        except Exception as e:
+            print(f"WARNING: could not re-index product {getattr(p, 'id', '?')}: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"Starting LUMIO backend... (main.py build v4: cart+orders+health) file={__file__}")
+    print(f"Starting LUMIO backend... (main.py build v6: cart+orders+health+store-stock) file={__file__}")
     test_connection()
 
     # 1. Verify / Create all PostgreSQL tables
@@ -258,6 +342,9 @@ async def lifespan(app: FastAPI):
             conn.commit()
     except Exception as e:
         print(f"WARNING: skipped retailer_id column check ({type(e).__name__}): {e}")
+
+    add_missing_columns()            # new model columns on tables that already exist
+    migrate_inventory_per_retailer() # inventory: one row per (retailer, product)
 
     print("Aiven PostgreSQL tables verified/created!")
 
@@ -649,19 +736,48 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
 
 # ==========================================
-# 5. INVENTORY ENDPOINTS
+# 5. INVENTORY ENDPOINTS  (offline shelf stock PER RETAILER)
 # ==========================================
+# products.stock_quantity = ONLINE stock (what the website sells; checkout reduces it).
+# inventory rows          = OFFLINE stock a specific retailer holds in their physical store.
+# When a product is out of stock online, /products/{id}/nearest-retailers lists the stores
+# whose inventory still has it.
+
+def _validate_inventory_numbers(stock: Optional[int], reserved: Optional[int]) -> None:
+    if stock is not None and stock < 0:
+        raise HTTPException(status_code=400, detail="stock_quantity cannot be negative")
+    if reserved is not None and reserved < 0:
+        raise HTTPException(status_code=400, detail="reserved_quantity cannot be negative")
+    if stock is not None and reserved is not None and reserved > stock:
+        raise HTTPException(status_code=400, detail="reserved_quantity cannot exceed stock_quantity")
+
 
 @app.post("/inventory/", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED, tags=["Inventory"])
 def create_or_init_inventory(inv_in: InventoryCreate, db: Session = Depends(get_db)):
-    if not db.query(Product).filter(Product.id == inv_in.product_id).first():
+    product = db.query(Product).filter(Product.id == inv_in.product_id).first()
+    if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    existing_inv = db.query(Inventory).filter(Inventory.product_id == inv_in.product_id).first()
-    if existing_inv:
-        raise HTTPException(status_code=400, detail="Inventory record already exists for this product")
+    # Stock is tracked per store: default to the product's own retailer when not given.
+    retailer_id = inv_in.retailer_id if inv_in.retailer_id is not None else product.retailer_id
+    if retailer_id is None:
+        raise HTTPException(status_code=400, detail="retailer_id is required: inventory is tracked per store")
+    if not db.query(Retailer).filter(Retailer.id == retailer_id).first():
+        raise HTTPException(status_code=404, detail="Retailer not found")
 
-    new_inv = Inventory(**inv_in.model_dump())
+    _validate_inventory_numbers(inv_in.stock_quantity, inv_in.reserved_quantity)
+
+    existing_inv = (
+        db.query(Inventory)
+        .filter(Inventory.product_id == inv_in.product_id, Inventory.retailer_id == retailer_id)
+        .first()
+    )
+    if existing_inv:
+        raise HTTPException(status_code=400, detail="This store already has an inventory record for this product")
+
+    data = inv_in.model_dump()
+    data["retailer_id"] = retailer_id
+    new_inv = Inventory(**data)
     db.add(new_inv)
     db.commit()
     db.refresh(new_inv)
@@ -669,13 +785,33 @@ def create_or_init_inventory(inv_in: InventoryCreate, db: Session = Depends(get_
 
 
 @app.get("/inventory/", response_model=List[InventoryResponse], tags=["Inventory"])
-def get_all_inventory(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(Inventory).offset(skip).limit(limit).all()
+def get_all_inventory(
+    retailer_id: Optional[int] = None,
+    product_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Inventory)
+    if retailer_id is not None:
+        query = query.filter(Inventory.retailer_id == retailer_id)
+    if product_id is not None:
+        query = query.filter(Inventory.product_id == product_id)
+    return query.order_by(Inventory.id).offset(skip).limit(limit).all()
+
+
+@app.get("/inventory/retailer/{retailer_id}", response_model=List[InventoryResponse], tags=["Inventory"])
+def get_inventory_by_retailer(retailer_id: int, db: Session = Depends(get_db)):
+    return db.query(Inventory).filter(Inventory.retailer_id == retailer_id).order_by(Inventory.id).all()
 
 
 @app.get("/inventory/product/{product_id}", response_model=InventoryResponse, tags=["Inventory"])
-def get_inventory_by_product(product_id: int, db: Session = Depends(get_db)):
-    inv = db.query(Inventory).filter(Inventory.product_id == product_id).first()
+def get_inventory_by_product(product_id: int, retailer_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """One inventory record for a product. Several stores can stock it: pass ?retailer_id= to pick one."""
+    query = db.query(Inventory).filter(Inventory.product_id == product_id)
+    if retailer_id is not None:
+        query = query.filter(Inventory.retailer_id == retailer_id)
+    inv = query.order_by(Inventory.id).first()
     if not inv:
         raise HTTPException(status_code=404, detail="Inventory not found for this product")
     return inv
@@ -687,7 +823,12 @@ def update_inventory(inventory_id: int, update_in: InventoryUpdate, db: Session 
     if not inv:
         raise HTTPException(status_code=404, detail="Inventory record not found")
 
-    for key, value in update_in.model_dump(exclude_unset=True).items():
+    changes = update_in.model_dump(exclude_unset=True)
+    _validate_inventory_numbers(
+        changes.get("stock_quantity", inv.stock_quantity),
+        changes.get("reserved_quantity", inv.reserved_quantity),
+    )
+    for key, value in changes.items():
         setattr(inv, key, value)
 
     db.commit()
@@ -704,6 +845,10 @@ def delete_inventory(inventory_id: int, db: Session = Depends(get_db)):
     db.commit()
     return None
 
+
+# ------------------------------------------
+# Out of stock online -> stores that still have it on the shelf
+# ------------------------------------------
 EARTH_RADIUS_KM = 6371.0
 DEFAULT_BENGALURU_LAT = 12.9716
 DEFAULT_BENGALURU_LON = 77.5946
@@ -724,23 +869,31 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return EARTH_RADIUS_KM * c
 
 
-@app.get("/products/{product_id}/nearest-retailers", tags=["Inventory"])
+@app.get("/products/{product_id}/nearest-retailers", response_model=NearestRetailersResponse, tags=["Inventory"])
 def get_nearest_retailers(
     product_id: int,
-    lat: Optional[float] = Query(None, description="User latitude"),
-    lon: Optional[float] = Query(None, description="User longitude"),
+    lat: Optional[float] = Query(None, ge=-90, le=90, description="User latitude"),
+    lon: Optional[float] = Query(None, ge=-180, le=180, description="User longitude"),
+    limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
 ):
+    """
+    Stores that can hand over this product right now, nearest first.
+    A store qualifies if it has offline pickup enabled, a saved location, and
+    (stock_quantity - reserved_quantity) > 0 for this product in its inventory.
+    Without lat/lon distances are measured from central Bengaluru (location_fallback = true).
+    """
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    available = Inventory.stock_quantity - Inventory.reserved_quantity
     rows = (
         db.query(Inventory, Retailer)
         .join(Retailer, Inventory.retailer_id == Retailer.id)
         .filter(
             Inventory.product_id == product_id,
-            Inventory.stock_quantity > 0,
+            available > 0,
             Retailer.offline_pickup_enabled.is_(True),
             Retailer.latitude.isnot(None),
             Retailer.longitude.isnot(None),
@@ -749,25 +902,25 @@ def get_nearest_retailers(
     )
 
     used_fallback = lat is None or lon is None
-    origin_lat = lat if lat is not None else DEFAULT_BENGALURU_LAT
-    origin_lon = lon if lon is not None else DEFAULT_BENGALURU_LON
+    origin_lat = lat if not used_fallback else DEFAULT_BENGALURU_LAT
+    origin_lon = lon if not used_fallback else DEFAULT_BENGALURU_LON
 
     results = []
     for inv, retailer in rows:
-        dist_km = round(
-            _haversine_km(origin_lat, origin_lon, retailer.latitude, retailer.longitude),
-            2,
-        )
         results.append(
             {
                 "retailer_id": retailer.id,
                 "store_name": retailer.store_name,
-                "address": retailer.address,
+                "address": retailer.store_address or retailer.address,
                 "city": retailer.city,
                 "pincode": retailer.pincode,
                 "contact": retailer.contact,
-                "stock_quantity": inv.stock_quantity,
-                "distance_km": dist_km,
+                "stock_quantity": inv.stock_quantity - inv.reserved_quantity,
+                "distance_km": round(
+                    _haversine_km(origin_lat, origin_lon, retailer.latitude, retailer.longitude), 2
+                ),
+                "latitude": retailer.latitude,
+                "longitude": retailer.longitude,
             }
         )
 
@@ -778,7 +931,66 @@ def get_nearest_retailers(
         "product_name": product.name,
         "online_stock_quantity": product.stock_quantity,
         "location_fallback": used_fallback,
-        "retailers": results,
+        "retailers": results[:limit],
+    }
+
+
+# DEV ONLY: demo data so the out-of-stock -> nearby stores flow can be tried. Remove for production.
+_DEMO_AREAS = [
+    ("Indiranagar", "560038", 12.9719, 77.6412),
+    ("Koramangala", "560034", 12.9352, 77.6245),
+    ("Jayanagar", "560011", 12.9308, 77.5838),
+    ("Whitefield", "560066", 12.9698, 77.7500),
+    ("HSR Layout", "560102", 12.9116, 77.6389),
+    ("Malleshwaram", "560003", 13.0035, 77.5710),
+    ("Yelahanka", "560064", 13.1007, 77.5963),
+    ("Electronic City", "560100", 12.8452, 77.6602),
+]
+
+
+@app.post("/dev/seed-store-stock", tags=["Inventory"])
+def seed_store_stock(db: Session = Depends(get_db)):
+    """
+    (1) Gives each retailer that has no coordinates a Bengaluru-area location.
+    (2) For every product that is out of stock online, puts a few units on the shelves of up to
+        3 retailers (only where that store has no inventory row for it yet). Safe to repeat.
+    """
+    retailers = db.query(Retailer).order_by(Retailer.id).all()
+    if not retailers:
+        raise HTTPException(status_code=400, detail="No retailers exist yet. Register a retailer account first.")
+
+    located = 0
+    for idx, r in enumerate(retailers):
+        if r.latitude is None or r.longitude is None:
+            _area, pin, lat, lon = _DEMO_AREAS[idx % len(_DEMO_AREAS)]
+            r.latitude, r.longitude = lat, lon
+            r.city = r.city or "Bengaluru"
+            r.pincode = r.pincode or pin
+            located += 1
+        if r.offline_pickup_enabled is None:
+            r.offline_pickup_enabled = True
+
+    oos = db.query(Product).filter((Product.stock_quantity <= 0) | (Product.is_available.is_(False))).all()
+    added = 0
+    for p in oos:
+        for k in range(min(3, len(retailers))):
+            r = retailers[(p.id + k) % len(retailers)]
+            exists = (
+                db.query(Inventory)
+                .filter(Inventory.retailer_id == r.id, Inventory.product_id == p.id)
+                .first()
+            )
+            if exists:
+                continue
+            db.add(Inventory(retailer_id=r.id, product_id=p.id, stock_quantity=3 + (p.id * 7 + k * 5) % 15, reserved_quantity=0))
+            added += 1
+
+    db.commit()
+    return {
+        "retailers": len(retailers),
+        "retailers_given_location": located,
+        "out_of_stock_products": len(oos),
+        "inventory_rows_added": added,
     }
 
 
@@ -967,14 +1179,15 @@ def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
 
     for product, qty in lines:
         db.add(OrderItem(order_id=order.id, product_id=product.id, quantity=qty, unit_price=product.price))
+        # Online orders only reduce ONLINE stock (products.stock_quantity).
+        # `inventory` rows are per-store offline shelf stock and are not touched here.
         product.stock_quantity -= qty
-        if product.inventory is not None:
-            product.inventory.stock_quantity = max(0, product.inventory.stock_quantity - qty)
 
     for item in list(cart.items):
         db.delete(item)
 
     db.commit()
+    reindex_products([p for p, _ in lines])  # so search results show the new stock / sold-out state
     return _fetch_order(db, order.id)
 
 
@@ -1019,10 +1232,10 @@ def update_order_status(order_id: int, update_in: OrderStatusUpdate, db: Session
             for item in order.items:
                 if item.product is not None:
                     item.product.stock_quantity += item.quantity
-                    if item.product.inventory is not None:
-                        item.product.inventory.stock_quantity += item.quantity
         order.status = new_status
         db.commit()
+        if new_status == OrderStatus.CANCELLED.value:
+            reindex_products([i.product for i in order.items if i.product is not None])
     return _fetch_order(db, order_id)
 
 

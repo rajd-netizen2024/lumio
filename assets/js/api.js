@@ -628,9 +628,8 @@
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bindControls);
-  } else {
-    bindControls();
-  }
+  // NOTE: the search box (#product-search-input / #clear-search-btn) is bound by catalog.js.
+  // api.js used to bind it too, so every keystroke fired two /products requests (the second
+  // one had no listener and its result was thrown away). Pages that don't load catalog.js can
+  // opt in with: window.LumioCatalog.bindControls();
 })();
