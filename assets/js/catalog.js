@@ -1,16 +1,23 @@
 /**
  * LUMIO Dynamic Catalog Controller
- * Loads products from FastAPI backend, filters by category/price, and handles cart actions
+ * Loads products from FastAPI backend, searches via OpenSearch, filters by category/price,
+ * and handles cart actions.
  */
 
 (function () {
   let allProducts = [];
   let currentCategory = null;
+  let searchDebounceTimer = null;
 
   function escapeHtml(str) {
     return String(str == null ? "" : str).replace(/[&<>"']/g, (ch) => (
       { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
     ));
+  }
+
+  function getSearchQuery() {
+    const input = document.getElementById("product-search-input");
+    return input ? input.value.trim() : "";
   }
 
   // Determine active category from data-attribute, URL parameter, or page title
@@ -41,12 +48,13 @@
     if (!grid) return;
 
     currentCategory = getActiveCategory();
+    const searchQuery = getSearchQuery();
 
     // Show loading state
     grid.innerHTML = `
       <div class="lumio-loading-spinner">
         <div class="lumio-spinner-circle"></div>
-        <span>Loading products from database...</span>
+        <span>${searchQuery ? `Searching for "${escapeHtml(searchQuery)}"...` : "Loading products from database..."}</span>
       </div>
     `;
 
@@ -55,11 +63,14 @@
       if (currentCategory && currentCategory !== "All") {
         params.category = currentCategory;
       }
+      if (searchQuery) {
+        params.q = searchQuery;
+      }
 
       allProducts = await window.LumioAPI.getProducts(params);
 
-      // If category has no items yet, fallback to fetching all products
-      if (!allProducts.length && currentCategory) {
+      // Only fall back to all products when browsing a category with no search query
+      if (!allProducts.length && currentCategory && !searchQuery) {
         const fallback = await window.LumioAPI.getProducts({});
         if (fallback.length) {
           allProducts = fallback;
@@ -86,6 +97,7 @@
 
     const sortSelect = document.getElementById("sort-select");
     const priceSelect = document.getElementById("price-select");
+    const searchQuery = getSearchQuery();
 
     let filtered = [...allProducts];
 
@@ -119,8 +131,8 @@
     if (!filtered.length) {
       grid.innerHTML = `
         <div class="lumio-empty-state">
-          <h3>No products match this filter</h3>
-          <p>Try selecting a different price range or clearing your filter.</p>
+          <h3>${searchQuery ? `No products found for "${escapeHtml(searchQuery)}"` : "No products match this filter"}</h3>
+          <p>${searchQuery ? "Try another keyword or click Clear to reset." : "Try selecting a different price range or clearing your filter."}</p>
         </div>
       `;
       return;
@@ -137,7 +149,7 @@
       if (btn && product) {
         btn.onclick = async (e) => {
           e.preventDefault();
-          if (btn.disabled) return; // ignore double-clicks while a request is in flight
+          if (btn.disabled) return;
 
           if (product.is_available === false || Number(product.stock_quantity) <= 0) {
             window.LumioUI.toast(`"${product.name}" is out of stock.`, "error");
@@ -146,12 +158,9 @@
 
           btn.disabled = true;
           try {
-            // Logged in -> POST /cart/{user}/items (header badge updated by LumioCartSync)
-            // Guest     -> localStorage cart
             await window.LumioCartSync.add(product, 1);
             window.LumioUI.toast(`Added "${product.name}" to cart!`, "success");
           } catch (err) {
-            // e.g. 409 "Only 3 unit(s) of 'X' available"
             window.LumioUI.toast(err.message || "Could not add to cart", "error");
           } finally {
             btn.disabled = false;
@@ -167,10 +176,37 @@
     }
   }
 
-  // Bind filter & sort change events
+  // Bind search, clear, filter & sort events
   function bindControls() {
+    const searchInput = document.getElementById("product-search-input");
+    const clearBtn = document.getElementById("clear-search-btn");
     const sortSelect = document.getElementById("sort-select");
     const priceSelect = document.getElementById("price-select");
+
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          loadProducts();
+        }, 250);
+      });
+
+      // Handle native search clear ("x") button in <input type="search">
+      searchInput.addEventListener("search", () => {
+        clearTimeout(searchDebounceTimer);
+        loadProducts();
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        if (searchInput) {
+          searchInput.value = "";
+        }
+        clearTimeout(searchDebounceTimer);
+        loadProducts();
+      });
+    }
 
     if (sortSelect) {
       sortSelect.addEventListener("change", applyFiltersAndRender);

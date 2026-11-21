@@ -1,8 +1,3 @@
-/**
- * LUMIO Full-Stack API & State Management
- * Connects Frontend directly with FastAPI Backend (Aiven PostgreSQL)
- */
-
 (function () {
   const isBackendOrigin =
     window.location.protocol.startsWith("http") &&
@@ -11,6 +6,9 @@
   const API_BASE_URL = isBackendOrigin
     ? window.location.origin
     : "http://127.0.0.1:8000";
+
+  let allProducts = [];
+  let currentCategory = "All";
 
   // Generic fetch wrapper with clean error handling
   async function request(endpoint, options = {}) {
@@ -91,6 +89,73 @@
   }
 
   // ==========================================
+  // Catalog Search & Loading
+  // ==========================================
+  function getSearchQuery() {
+    const input = document.getElementById("product-search-input");
+    return input ? input.value.trim() : "";
+  }
+
+  async function loadProducts() {
+    const searchQuery = getSearchQuery();
+    const params = {};
+    if (currentCategory && currentCategory !== "All") {
+      params.category = currentCategory;
+    }
+    if (searchQuery) {
+      params.q = searchQuery;
+    }
+
+    allProducts = await window.LumioAPI.getProducts(params);
+
+    if (!allProducts.length && currentCategory && !searchQuery) {
+      const fallback = await window.LumioAPI.getProducts({});
+      if (fallback.length) {
+        allProducts = fallback;
+      }
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("lumio:products_loaded", {
+        detail: { products: allProducts, category: currentCategory, query: searchQuery },
+      })
+    );
+
+    return allProducts;
+  }
+
+  function bindControls() {
+    const searchInput = document.getElementById("product-search-input");
+    const clearBtn = document.getElementById("clear-search-btn");
+    let searchTimer = null;
+
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          loadProducts();
+        }, 250);
+      });
+
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          clearTimeout(searchTimer);
+          loadProducts();
+        }
+      });
+    }
+
+    if (clearBtn && searchInput) {
+      clearBtn.addEventListener("click", () => {
+        searchInput.value = "";
+        clearTimeout(searchTimer);
+        loadProducts();
+      });
+    }
+  }
+
+  // ==========================================
   // API Endpoints
   // ==========================================
   window.LumioAPI = {
@@ -99,9 +164,9 @@
     // Products
     async getProducts(params = {}) {
       const query = new URLSearchParams();
+      if (params.q) query.append("q", params.q);
       if (params.category) query.append("category", params.category);
       if (params.brand) query.append("brand", params.brand);
-      if (params.search) query.append("search", params.search);
       if (params.is_available !== undefined)
         query.append("is_available", params.is_available);
       if (params.skip) query.append("skip", params.skip);
@@ -279,6 +344,19 @@
         method: "PUT",
         body: JSON.stringify({ status: orderStatus }),
       });
+    },
+  };
+
+  window.LumioCatalog = {
+    loadProducts,
+    bindControls,
+    getSearchQuery,
+    setCategory(category) {
+      currentCategory = category || "All";
+      return loadProducts();
+    },
+    getProductsCache() {
+      return allProducts;
     },
   };
 
@@ -536,5 +614,11 @@
     syncPromise = window.LumioCartSync.refresh().catch((err) => {
       console.warn("[LUMIO] Initial cart load failed:", err.message);
     });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindControls);
+  } else {
+    bindControls();
   }
 })();
