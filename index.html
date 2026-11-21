@@ -16,12 +16,14 @@
 
 <body>
   <div class="header">
-      <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#3C1A8D"
-        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z" />
-      </svg><span>
-        <a href="./index.html"><h1>LUMIO</h1></a>
-      </span>
+    <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#3C1A8D"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z" />
+    </svg><span>
+      <a href="./index.html">
+        <h1>LUMIO</h1>
+      </a>
+    </span>
 
     <ul class="links">
       <li class="links"><a href="./index.html">Home</a></li>
@@ -93,9 +95,22 @@
   <!-- Featured Products from Backend (PostgreSQL) -->
   <section class="main-content" id="featured-products" style="margin-top: 30px; margin-bottom: 80px; padding: 0 40px;">
     <h1>Featured Products</h1>
-    <p style="text-align: center; color: #64748b; font-size: 1rem; margin-top: -10px; margin-bottom: 35px;">
-      Explore our live cloud catalog powered by FastAPI & PostgreSQL
+    <p style="text-align: center; color: #64748b; font-size: 1rem; margin-top: -10px; margin-bottom: 24px;">
+      Explore our live cloud catalog powered by FastAPI, OpenSearch & PostgreSQL
     </p>
+
+    <!-- OpenSearch / Catalog Search Bar -->
+    <div id="lumio-search-bar"
+      style="display: flex; justify-content: center; gap: 10px; max-width: 540px; margin: 0 auto 30px;">
+      <input type="search" id="product-search-input"
+        placeholder="Search products with OpenSearch (e.g., vase, lamp, ceramic)..." aria-label="Search products"
+        style="flex: 1; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit; font-size: 0.95rem;" />
+      <button type="button" id="clear-search-btn"
+        style="padding: 10px 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; cursor: pointer; font-family: inherit; font-weight: 500;">
+        Clear
+      </button>
+    </div>
+
     <div class="catalog-grid" id="catalog-grid" data-category="All">
       <div class="lumio-loading-spinner">
         <div class="lumio-spinner-circle"></div>
