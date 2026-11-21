@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import text,or_
+from sqlalchemy import text, or_
 from services.search import (
     search_products_opensearch,
     index_product_document,
@@ -190,6 +190,24 @@ DEFAULT_SAMPLE_PRODUCTS = [
 ]
 
 
+def _product_to_search_doc(product: Product) -> dict:
+    return {
+        "id": product.id,
+        "retailer_id": product.retailer_id,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price) if product.price is not None else None,
+        "original_price": float(product.original_price) if product.original_price is not None else None,
+        "category": product.category,
+        "brand": product.brand,
+        "image_url": product.image_url,
+        "stock_quantity": product.stock_quantity,
+        "is_available": bool(product.is_available),
+        "created_at": product.created_at.isoformat() if product.created_at else None,
+        "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+    }
+
+
 def seed_products_if_needed():
     db = SessionLocal()
     try:
@@ -203,6 +221,11 @@ def seed_products_if_needed():
                     db.add(p)
             db.commit()
             print("Successfully seeded demo products!")
+
+        all_products = db.query(Product).all()
+        if all_products:
+            indexed_count = bulk_index_products([_product_to_search_doc(p) for p in all_products])
+            print(f"Synced {indexed_count}/{len(all_products)} products to OpenSearch.")
     except Exception as e:
         db.rollback()
         print(f"Error during initial product seeding: {e}")
@@ -508,27 +531,10 @@ def delete_address(address_id: int, db: Session = Depends(get_db)):
 # ==========================================
 # 4. PRODUCT ENDPOINTS
 # ==========================================
-def _product_to_search_doc(product: Product) -> dict:
-    return {
-        "id": product.id,
-        "retailer_id": product.retailer_id,
-        "name": product.name,
-        "description": product.description,
-        "price": float(product.price) if product.price is not None else None,
-        "original_price": float(product.original_price) if product.original_price is not None else None,
-        "category": product.category,
-        "brand": product.brand,
-        "image_url": product.image_url,
-        "stock_quantity": product.stock_quantity,
-        "is_available": bool(product.is_available),
-        "created_at": product.created_at.isoformat() if product.created_at else None,
-        "updated_at": product.updated_at.isoformat() if product.updated_at else None,
-    }
-
 
 @app.post("/products/seed", tags=["Products"])
 def seed_products_endpoint(db: Session = Depends(get_db)):
-    """Seed the database with sample products for all LUMIO categories."""
+    """Seed the database with sample products for all LUMIO categories and sync OpenSearch."""
     added = 0
     for item in DEFAULT_SAMPLE_PRODUCTS:
         exists = db.query(Product).filter(Product.name == item["name"]).first()
@@ -536,8 +542,15 @@ def seed_products_endpoint(db: Session = Depends(get_db)):
             db.add(Product(**item))
             added += 1
     db.commit()
-    total = db.query(Product).count()
-    return {"message": f"Added {added} products", "total_products": total}
+
+    all_products = db.query(Product).all()
+    indexed_count = bulk_index_products([_product_to_search_doc(p) for p in all_products])
+
+    return {
+        "message": f"Added {added} products",
+        "total_products": len(all_products),
+        "indexed_in_opensearch": indexed_count,
+    }
 
 
 @app.post("/products/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED, tags=["Products"])
@@ -550,6 +563,8 @@ def create_product(product_in: ProductCreate, db: Session = Depends(get_db)):
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
+
+    index_product_document(_product_to_search_doc(new_product))
     return new_product
 
 
@@ -587,9 +602,12 @@ def list_products(
             or_(
                 Product.name.ilike(pattern),
                 Product.description.ilike(pattern),
+                Product.brand.ilike(pattern),
+                Product.category.ilike(pattern),
             )
         )
     return query.all()
+
 
 @app.get("/products/{product_id}", response_model=ProductResponse, tags=["Products"])
 def get_product_by_id(product_id: int, db: Session = Depends(get_db)):
@@ -611,6 +629,8 @@ def update_product(product_id: int, product_update: ProductUpdate, db: Session =
 
     db.commit()
     db.refresh(product)
+
+    index_product_document(_product_to_search_doc(product))
     return product
 
 
@@ -622,6 +642,8 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
     db.delete(product)
     db.commit()
+
+    delete_product_document(product_id)
     return None
 
 
@@ -953,5 +975,5 @@ def serve_index_or_api_status():
     index_file = ROOT_DIR / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
-    
+
     return {"message": "LUMIO backend is running on Aiven PostgreSQL!"}
