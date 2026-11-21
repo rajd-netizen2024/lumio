@@ -1,29 +1,51 @@
 import os
+import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Optional
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import FastAPI, Depends, HTTPException, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text
 
-# Correct imports based on your database/ folder structure
+# Database, Model & Schema imports
 from database.connection import test_connection, engine, get_db, SessionLocal, Base
-from database.models import User, Product, UserRole
+from database.models import (
+    User, Retailer, Address, Product, Inventory,
+    Cart, CartItem, Order, OrderItem,
+    UserRole, OrderStatus,
+)
 from database.schemas import (
     UserLogin,
     UserCreate,
     UserUpdate,
     UserResponse,
+    RetailerCreate,
+    RetailerUpdate,
+    RetailerResponse,
+    AddressCreate,
+    AddressUpdate,
+    AddressResponse,
     ProductCreate,
     ProductUpdate,
     ProductResponse,
+    InventoryCreate,
+    InventoryUpdate,
+    InventoryResponse,
+    CartItemAdd,
+    CartItemUpdate,
+    CartResponse,
+    OrderCreate,
+    OrderStatusUpdate,
+    OrderResponse,
 )
 
-# Project root directory (contains index.html, styles.css, public/, assets/)
+# Project root directory
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
 DEFAULT_SAMPLE_PRODUCTS = [
@@ -184,10 +206,29 @@ def seed_products_if_needed():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("Starting LUMIO backend...")
+    print(f"Starting LUMIO backend... (main.py build v4: cart+orders+health) file={__file__}")
     test_connection()
-    # Creates 'users' and 'products' tables in Aiven PostgreSQL
+
+    # 1. Verify / Create all PostgreSQL tables
     Base.metadata.create_all(bind=engine)
+
+    # 2. Add 'retailer_id' column if missing on existing table.
+    #    ALTER TABLE needs a lock on `products`; if another session is holding one (e.g. a
+    #    stale connection from a crashed run) it would wait forever and the whole server would
+    #    hang at startup. SET LOCAL lock_timeout makes it give up after 5s instead.
+    print("Checking products.retailer_id column...")
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SET LOCAL lock_timeout = '5s'"))
+            conn.execute(text("""
+                ALTER TABLE products
+                ADD COLUMN IF NOT EXISTS retailer_id INTEGER
+                REFERENCES retailers(id) ON DELETE SET NULL;
+            """))
+            conn.commit()
+    except Exception as e:
+        print(f"WARNING: skipped retailer_id column check ({type(e).__name__}): {e}")
+
     print("Aiven PostgreSQL tables verified/created!")
 
     seed_products_if_needed()
@@ -199,7 +240,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="LUMIO Backend", lifespan=lifespan)
 
-# Enable CORS for frontend integration
+# CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -209,8 +250,41 @@ app.add_middleware(
 )
 
 
+# Unhandled errors normally come back WITHOUT CORS headers, so the browser reports them as a
+# generic "failed to fetch". Return a JSON 500 with CORS headers so the real cause is visible.
+# (Dev convenience: remove the exception text before going to production.)
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc):
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Server error: {type(exc).__name__}: {exc}"},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
 # ==========================================
-# USER CRUD & AUTH ENDPOINTS
+# 0. HEALTH CHECKS (for debugging hangs)
+# ==========================================
+@app.get("/health", tags=["Health"])
+def health():
+    """Does NOT touch the database: if this answers, the web server itself is fine."""
+    return {"status": "ok"}
+
+
+@app.get("/health/db", tags=["Health"])
+def health_db(db: Session = Depends(get_db)):
+    """Touches the database: reports reachability and how many connections are open."""
+    db.execute(text("SET LOCAL statement_timeout = '5s'"))
+    one = db.execute(text("SELECT 1")).scalar()
+    conns = db.execute(
+        text("SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()")
+    ).scalar()
+    return {"status": "ok", "select_1": one, "open_connections_to_this_db": conns}
+
+
+# ==========================================
+# 1. USER & AUTH ENDPOINTS
 # ==========================================
 
 @app.post("/users/login", response_model=UserResponse, tags=["Users"])
@@ -301,7 +375,132 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 
 
 # ==========================================
-# PRODUCT CRUD & SEED ENDPOINTS
+# 2. RETAILER ENDPOINTS
+# ==========================================
+
+@app.post("/retailers/", response_model=RetailerResponse, status_code=status.HTTP_201_CREATED, tags=["Retailers"])
+def create_retailer(retailer_in: RetailerCreate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == retailer_in.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if db.query(Retailer).filter(Retailer.user_id == retailer_in.user_id).first():
+        raise HTTPException(status_code=400, detail="Retailer profile already exists for this user")
+
+    new_retailer = Retailer(**retailer_in.model_dump())
+    db.add(new_retailer)
+    db.commit()
+    db.refresh(new_retailer)
+    return new_retailer
+
+
+@app.get("/retailers/", response_model=List[RetailerResponse], tags=["Retailers"])
+def get_all_retailers(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return db.query(Retailer).offset(skip).limit(limit).all()
+
+
+@app.get("/retailers/by-user/{user_id}", response_model=RetailerResponse, tags=["Retailers"])
+def get_retailer_by_user(user_id: int, db: Session = Depends(get_db)):
+    retailer = db.query(Retailer).filter(Retailer.user_id == user_id).first()
+    if not retailer:
+        raise HTTPException(status_code=404, detail="Retailer profile not found for this user")
+    return retailer
+
+
+@app.get("/retailers/{retailer_id}", response_model=RetailerResponse, tags=["Retailers"])
+def get_retailer(retailer_id: int, db: Session = Depends(get_db)):
+    retailer = db.query(Retailer).filter(Retailer.id == retailer_id).first()
+    if not retailer:
+        raise HTTPException(status_code=404, detail="Retailer not found")
+    return retailer
+
+
+@app.put("/retailers/{retailer_id}", response_model=RetailerResponse, tags=["Retailers"])
+def update_retailer(retailer_id: int, update_in: RetailerUpdate, db: Session = Depends(get_db)):
+    retailer = db.query(Retailer).filter(Retailer.id == retailer_id).first()
+    if not retailer:
+        raise HTTPException(status_code=404, detail="Retailer not found")
+
+    for key, value in update_in.model_dump(exclude_unset=True).items():
+        setattr(retailer, key, value)
+
+    db.commit()
+    db.refresh(retailer)
+    return retailer
+
+
+@app.delete("/retailers/{retailer_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Retailers"])
+def delete_retailer(retailer_id: int, db: Session = Depends(get_db)):
+    retailer = db.query(Retailer).filter(Retailer.id == retailer_id).first()
+    if not retailer:
+        raise HTTPException(status_code=404, detail="Retailer not found")
+    db.delete(retailer)
+    db.commit()
+    return None
+
+
+# ==========================================
+# 3. ADDRESS ENDPOINTS
+# ==========================================
+
+@app.post("/addresses/", response_model=AddressResponse, status_code=status.HTTP_201_CREATED, tags=["Addresses"])
+def create_address(address_in: AddressCreate, db: Session = Depends(get_db)):
+    if not db.query(User).filter(User.id == address_in.user_id).first():
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_address = Address(**address_in.model_dump())
+    db.add(new_address)
+    db.commit()
+    db.refresh(new_address)
+    return new_address
+
+
+@app.get("/addresses/", response_model=List[AddressResponse], tags=["Addresses"])
+def get_addresses(
+    user_id: Optional[int] = Query(None, description="Filter addresses by user ID"),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Address)
+    if user_id:
+        query = query.filter(Address.user_id == user_id)
+    return query.offset(skip).limit(limit).all()
+
+
+@app.get("/addresses/{address_id}", response_model=AddressResponse, tags=["Addresses"])
+def get_address(address_id: int, db: Session = Depends(get_db)):
+    address = db.query(Address).filter(Address.id == address_id).first()
+    if not address:
+        raise HTTPException(status_code=404, detail="Address not found")
+    return address
+
+
+@app.put("/addresses/{address_id}", response_model=AddressResponse, tags=["Addresses"])
+def update_address(address_id: int, update_in: AddressUpdate, db: Session = Depends(get_db)):
+    address = db.query(Address).filter(Address.id == address_id).first()
+    if not address:
+        raise HTTPException(status_code=404, detail="Address not found")
+
+    for key, value in update_in.model_dump(exclude_unset=True).items():
+        setattr(address, key, value)
+
+    db.commit()
+    db.refresh(address)
+    return address
+
+
+@app.delete("/addresses/{address_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Addresses"])
+def delete_address(address_id: int, db: Session = Depends(get_db)):
+    address = db.query(Address).filter(Address.id == address_id).first()
+    if not address:
+        raise HTTPException(status_code=404, detail="Address not found")
+    db.delete(address)
+    db.commit()
+    return None
+
+
+# ==========================================
+# 4. PRODUCT ENDPOINTS
 # ==========================================
 
 @app.post("/products/seed", tags=["Products"])
@@ -320,6 +519,10 @@ def seed_products_endpoint(db: Session = Depends(get_db)):
 
 @app.post("/products/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED, tags=["Products"])
 def create_product(product_in: ProductCreate, db: Session = Depends(get_db)):
+    if product_in.retailer_id:
+        if not db.query(Retailer).filter(Retailer.id == product_in.retailer_id).first():
+            raise HTTPException(status_code=404, detail="Retailer not found")
+
     new_product = Product(**product_in.model_dump())
     db.add(new_product)
     db.commit()
@@ -331,6 +534,7 @@ def create_product(product_in: ProductCreate, db: Session = Depends(get_db)):
 def get_all_products(
     category: Optional[str] = Query(None, description="Filter by category"),
     brand: Optional[str] = Query(None, description="Filter by brand"),
+    retailer_id: Optional[int] = Query(None, description="Filter by retailer ID"),
     is_available: Optional[bool] = Query(None, description="Filter by availability"),
     search: Optional[str] = Query(None, description="Search by name or description"),
     skip: int = 0,
@@ -339,10 +543,11 @@ def get_all_products(
 ):
     query = db.query(Product)
     if category:
-        # Case-insensitive category match
         query = query.filter(Product.category.ilike(f"%{category}%"))
     if brand:
         query = query.filter(Product.brand.ilike(f"%{brand}%"))
+    if retailer_id:
+        query = query.filter(Product.retailer_id == retailer_id)
     if is_available is not None:
         query = query.filter(Product.is_available == is_available)
     if search:
@@ -387,8 +592,310 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
 
 # ==========================================
-# STATIC FILES SERVING (OPTIONAL DUAL-SERVE)
+# 5. INVENTORY ENDPOINTS
 # ==========================================
+
+@app.post("/inventory/", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED, tags=["Inventory"])
+def create_or_init_inventory(inv_in: InventoryCreate, db: Session = Depends(get_db)):
+    if not db.query(Product).filter(Product.id == inv_in.product_id).first():
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    existing_inv = db.query(Inventory).filter(Inventory.product_id == inv_in.product_id).first()
+    if existing_inv:
+        raise HTTPException(status_code=400, detail="Inventory record already exists for this product")
+
+    new_inv = Inventory(**inv_in.model_dump())
+    db.add(new_inv)
+    db.commit()
+    db.refresh(new_inv)
+    return new_inv
+
+
+@app.get("/inventory/", response_model=List[InventoryResponse], tags=["Inventory"])
+def get_all_inventory(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    return db.query(Inventory).offset(skip).limit(limit).all()
+
+
+@app.get("/inventory/product/{product_id}", response_model=InventoryResponse, tags=["Inventory"])
+def get_inventory_by_product(product_id: int, db: Session = Depends(get_db)):
+    inv = db.query(Inventory).filter(Inventory.product_id == product_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Inventory not found for this product")
+    return inv
+
+
+@app.put("/inventory/{inventory_id}", response_model=InventoryResponse, tags=["Inventory"])
+def update_inventory(inventory_id: int, update_in: InventoryUpdate, db: Session = Depends(get_db)):
+    inv = db.query(Inventory).filter(Inventory.id == inventory_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Inventory record not found")
+
+    for key, value in update_in.model_dump(exclude_unset=True).items():
+        setattr(inv, key, value)
+
+    db.commit()
+    db.refresh(inv)
+    return inv
+
+
+@app.delete("/inventory/{inventory_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Inventory"])
+def delete_inventory(inventory_id: int, db: Session = Depends(get_db)):
+    inv = db.query(Inventory).filter(Inventory.id == inventory_id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Inventory record not found")
+    db.delete(inv)
+    db.commit()
+    return None
+
+
+# ==========================================
+# 6. CART ENDPOINTS  (DB-backed, one cart per user)
+# ==========================================
+# Every cart endpoint returns the FULL updated CartResponse (including
+# items[].product) so the frontend can re-render from a single response.
+
+def _require_user(db: Session, user_id: int) -> User:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+def _fetch_cart(db: Session, user_id: int) -> Optional[Cart]:
+    db.expire_all()  # make sure items/products are re-read after a commit
+    return (
+        db.query(Cart)
+        .options(selectinload(Cart.items).selectinload(CartItem.product))
+        .filter(Cart.user_id == user_id)
+        .first()
+    )
+
+
+def _get_cart(db: Session, user_id: int) -> Cart:
+    """Return the user's cart, creating an empty one on first use."""
+    cart = _fetch_cart(db, user_id)
+    if cart is None:
+        try:
+            db.add(Cart(user_id=user_id))
+            db.commit()
+        except IntegrityError:  # two requests raced to create the cart
+            db.rollback()
+        cart = _fetch_cart(db, user_id)
+    return cart
+
+
+def _check_stock(product: Product, wanted_qty: int) -> None:
+    if not product.is_available:
+        raise HTTPException(status_code=409, detail=f"'{product.name}' is currently unavailable")
+    if product.stock_quantity <= 0:
+        raise HTTPException(status_code=409, detail=f"'{product.name}' is out of stock")
+    if wanted_qty > product.stock_quantity:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only {product.stock_quantity} unit(s) of '{product.name}' available",
+        )
+
+
+@app.get("/cart/{user_id}", response_model=CartResponse, tags=["Cart"])
+def get_cart(user_id: int, db: Session = Depends(get_db)):
+    _require_user(db, user_id)
+    return _get_cart(db, user_id)
+
+
+@app.post("/cart/{user_id}/items", response_model=CartResponse, tags=["Cart"])
+def add_cart_item(user_id: int, item_in: CartItemAdd, db: Session = Depends(get_db)):
+    """Add a product to the cart; if it is already there, increase its quantity."""
+    _require_user(db, user_id)
+    if item_in.quantity < 1:
+        raise HTTPException(status_code=400, detail="Quantity must be at least 1")
+
+    product = db.query(Product).filter(Product.id == item_in.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    cart = _get_cart(db, user_id)
+    existing = next((i for i in cart.items if i.product_id == product.id), None)
+    new_qty = (existing.quantity if existing else 0) + item_in.quantity
+    _check_stock(product, new_qty)
+
+    if existing:
+        existing.quantity = new_qty
+    else:
+        db.add(CartItem(cart_id=cart.id, product_id=product.id, quantity=new_qty))
+    db.commit()
+    return _get_cart(db, user_id)
+
+
+@app.put("/cart/{user_id}/items/{item_id}", response_model=CartResponse, tags=["Cart"])
+def update_cart_item(user_id: int, item_id: int, update_in: CartItemUpdate, db: Session = Depends(get_db)):
+    """Set an item's quantity. A quantity of 0 or less removes the item."""
+    _require_user(db, user_id)
+    cart = _get_cart(db, user_id)
+    item = next((i for i in cart.items if i.id == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+
+    if update_in.quantity <= 0:
+        db.delete(item)
+    else:
+        _check_stock(item.product, update_in.quantity)
+        item.quantity = update_in.quantity
+    db.commit()
+    return _get_cart(db, user_id)
+
+
+@app.delete("/cart/{user_id}/items/{item_id}", response_model=CartResponse, tags=["Cart"])
+def remove_cart_item(user_id: int, item_id: int, db: Session = Depends(get_db)):
+    _require_user(db, user_id)
+    cart = _get_cart(db, user_id)
+    item = next((i for i in cart.items if i.id == item_id), None)
+    if not item:
+        raise HTTPException(status_code=404, detail="Cart item not found")
+    db.delete(item)
+    db.commit()
+    return _get_cart(db, user_id)
+
+
+@app.delete("/cart/{user_id}/clear", status_code=status.HTTP_204_NO_CONTENT, tags=["Cart"])
+def clear_cart(user_id: int, db: Session = Depends(get_db)):
+    _require_user(db, user_id)
+    cart = _get_cart(db, user_id)
+    for item in list(cart.items):
+        db.delete(item)
+    db.commit()
+    return None
+
+
+# ==========================================
+# 7. ORDER ENDPOINTS
+# ==========================================
+GST_RATE = Decimal("0.18")  # keep in sync with LumioCart / cart-page.js
+
+ORDER_TRANSITIONS = {
+    OrderStatus.PENDING.value: {OrderStatus.CONFIRMED.value, OrderStatus.CANCELLED.value},
+    OrderStatus.CONFIRMED.value: {OrderStatus.SHIPPED.value, OrderStatus.CANCELLED.value},
+    OrderStatus.SHIPPED.value: {OrderStatus.DELIVERED.value},
+    OrderStatus.DELIVERED.value: set(),
+    OrderStatus.CANCELLED.value: set(),
+}
+
+
+def _fetch_order(db: Session, order_id: int) -> Optional[Order]:
+    db.expire_all()
+    return (
+        db.query(Order)
+        .options(selectinload(Order.items).selectinload(OrderItem.product))
+        .filter(Order.id == order_id)
+        .first()
+    )
+
+
+@app.post("/orders/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED, tags=["Orders"])
+def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
+    """Turn the user's cart into an order, reduce stock, then empty the cart (one transaction)."""
+    _require_user(db, order_in.user_id)
+
+    if order_in.address_id is not None:
+        address = db.query(Address).filter(Address.id == order_in.address_id).first()
+        if not address or address.user_id != order_in.user_id:
+            raise HTTPException(status_code=404, detail="Address not found")
+
+    cart = _get_cart(db, order_in.user_id)
+    if not cart.items:
+        raise HTTPException(status_code=400, detail="Your cart is empty")
+
+    # Lock the product rows so two checkouts can't both take the last unit.
+    product_ids = [i.product_id for i in cart.items]
+    products = {
+        p.id: p
+        for p in db.query(Product).filter(Product.id.in_(product_ids)).with_for_update().all()
+    }
+
+    subtotal = Decimal("0")
+    lines = []
+    for item in cart.items:
+        product = products.get(item.product_id)
+        if product is None:
+            raise HTTPException(status_code=409, detail="A product in your cart no longer exists")
+        _check_stock(product, item.quantity)
+        subtotal += product.price * item.quantity
+        lines.append((product, item.quantity))
+
+    tax = (subtotal * GST_RATE).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    order = Order(
+        user_id=order_in.user_id,
+        address_id=order_in.address_id,
+        total_amount=subtotal + tax,
+        status=OrderStatus.PENDING.value,
+    )
+    db.add(order)
+    db.flush()  # get order.id
+
+    for product, qty in lines:
+        db.add(OrderItem(order_id=order.id, product_id=product.id, quantity=qty, unit_price=product.price))
+        product.stock_quantity -= qty
+        if product.inventory is not None:
+            product.inventory.stock_quantity = max(0, product.inventory.stock_quantity - qty)
+
+    for item in list(cart.items):
+        db.delete(item)
+
+    db.commit()
+    return _fetch_order(db, order.id)
+
+
+@app.get("/orders/", response_model=List[OrderResponse], tags=["Orders"])
+def get_orders(
+    user_id: Optional[int] = Query(None, description="Only this user's orders"),
+    order_status: Optional[OrderStatus] = Query(None, alias="status"),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    query = db.query(Order).options(selectinload(Order.items).selectinload(OrderItem.product))
+    if user_id:
+        query = query.filter(Order.user_id == user_id)
+    if order_status:
+        query = query.filter(Order.status == order_status.value)
+    return query.order_by(Order.id.desc()).offset(skip).limit(limit).all()
+
+
+@app.get("/orders/{order_id}", response_model=OrderResponse, tags=["Orders"])
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    order = _fetch_order(db, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
+
+
+@app.put("/orders/{order_id}/status", response_model=OrderResponse, tags=["Orders"])
+def update_order_status(order_id: int, update_in: OrderStatusUpdate, db: Session = Depends(get_db)):
+    order = _fetch_order(db, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    new_status = update_in.status.value
+    if new_status != order.status:
+        if new_status not in ORDER_TRANSITIONS.get(order.status, set()):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot change order from '{order.status}' to '{new_status}'",
+            )
+        if new_status == OrderStatus.CANCELLED.value:  # put the stock back
+            for item in order.items:
+                if item.product is not None:
+                    item.product.stock_quantity += item.quantity
+                    if item.product.inventory is not None:
+                        item.product.inventory.stock_quantity += item.quantity
+        order.status = new_status
+        db.commit()
+    return _fetch_order(db, order_id)
+
+
+# ==========================================
+# 8. STATIC FILES & FRONTEND SERVING
+# ==========================================
+
 assets_dir = ROOT_DIR / "assets"
 public_dir = ROOT_DIR / "public"
 
@@ -412,4 +919,5 @@ def serve_index_or_api_status():
     index_file = ROOT_DIR / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
+    
     return {"message": "LUMIO backend is running on Aiven PostgreSQL!"}
