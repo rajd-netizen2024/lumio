@@ -285,6 +285,18 @@
       return request(`/inventory/${id}`, { method: "PUT", body: JSON.stringify(data) });
     },
 
+    async getNearestRetailers(productId, coords = {}) {
+      const query = new URLSearchParams();
+      if (coords && coords.lat !== undefined && coords.lat !== null) {
+        query.append("lat", coords.lat);
+      }
+      if (coords && coords.lon !== undefined && coords.lon !== null) {
+        query.append("lon", coords.lon);
+      }
+      const qs = query.toString() ? `?${query.toString()}` : "";
+      return request(`/products/${productId}/nearest-retailers${qs}`);
+    },
+
     // Cart (DB-backed)
     // Every cart method except clearCart resolves to a full CartResponse:
     //   { id, user_id, created_at, updated_at,

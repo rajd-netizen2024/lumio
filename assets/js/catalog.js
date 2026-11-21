@@ -15,6 +15,79 @@
     ));
   }
 
+  let activeFallbackProduct = null;
+
+  function getUserCoords(timeoutMs = 4000) {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: timeoutMs, maximumAge: 60000 }
+      );
+    });
+  }
+
+  function closeNearestRetailersModal() {
+    const modal = document.getElementById("lumio-nearest-retailers-modal");
+    if (modal) modal.style.display = "none";
+    activeFallbackProduct = null;
+  }
+
+  async function openNearestRetailersModal(product, forceLocation = false) {
+    const modal = document.getElementById("lumio-nearest-retailers-modal");
+    const titleEl = document.getElementById("lumio-nr-title");
+    const statusEl = document.getElementById("lumio-nr-status");
+    const listEl = document.getElementById("lumio-nr-list");
+    if (!modal || !titleEl || !statusEl || !listEl) return;
+
+    activeFallbackProduct = product;
+    modal.style.display = "flex";
+    titleEl.textContent = `Out of Stock Online — ${product.name}`;
+    statusEl.textContent = "Checking nearby partner stores...";
+    listEl.innerHTML = "";
+
+    const coords = await getUserCoords(forceLocation ? 7000 : 3000);
+
+    try {
+      const data = await window.LumioAPI.getNearestRetailers(product.id, coords || {});
+      const stores = Array.isArray(data.retailers) ? data.retailers : [];
+
+      if (!stores.length) {
+        statusEl.textContent = "No nearby offline stores currently have stock for this item.";
+        return;
+      }
+
+      statusEl.textContent = data.location_fallback
+        ? "Location permission not enabled — showing distances from central Bengaluru:"
+        : "Available at nearby offline stores (sorted by distance):";
+
+      listEl.innerHTML = stores
+        .map(
+          (s) => `
+          <div style="border:1px solid #e2e8f0; border-radius:8px; padding:12px;">
+            <div style="display:flex; justify-content:space-between; gap:8px;">
+              <strong>${escapeHtml(s.store_name)}</strong>
+              <span style="font-weight:600; color:#3C1A8D;">${escapeHtml(s.distance_km)} km</span>
+            </div>
+            <div style="font-size:0.86rem; color:#475569; margin-top:4px;">
+              ${escapeHtml(s.address)}${s.city ? `, ${escapeHtml(s.city)}` : ""}${s.pincode ? ` - ${escapeHtml(s.pincode)}` : ""}
+            </div>
+            <div style="font-size:0.84rem; margin-top:6px;">
+              In stock: <strong>${escapeHtml(s.stock_quantity)}</strong> · Contact: ${escapeHtml(s.contact || "N/A")}
+            </div>
+          </div>
+        `
+        )
+        .join("");
+    } catch (err) {
+      statusEl.textContent = `Could not fetch nearby stores: ${err.message}`;
+    }
+  }
+
   function getSearchQuery() {
     const input = document.getElementById("product-search-input");
     return input ? input.value.trim() : "";
@@ -152,7 +225,8 @@
           if (btn.disabled) return;
 
           if (product.is_available === false || Number(product.stock_quantity) <= 0) {
-            window.LumioUI.toast(`"${product.name}" is out of stock.`, "error");
+            window.LumioUI.toast(`"${product.name}" is out of stock online. Checking nearby stores...`, "error");
+            openNearestRetailersModal(product, false);
             return;
           }
 
@@ -213,6 +287,23 @@
     }
     if (priceSelect) {
       priceSelect.addEventListener("change", applyFiltersAndRender);
+    }
+
+    // Nearest-retailers modal controls
+    const nrClose = document.getElementById("lumio-nr-close");
+    const nrRetry = document.getElementById("lumio-nr-retry-loc");
+    const nrModal = document.getElementById("lumio-nearest-retailers-modal");
+
+    if (nrClose) nrClose.addEventListener("click", closeNearestRetailersModal);
+    if (nrRetry) {
+      nrRetry.addEventListener("click", () => {
+        if (activeFallbackProduct) openNearestRetailersModal(activeFallbackProduct, true);
+      });
+    }
+    if (nrModal) {
+      nrModal.addEventListener("click", (e) => {
+        if (e.target === nrModal) closeNearestRetailersModal();
+      });
     }
 
     // Listen for live database modifications from Retailer modal

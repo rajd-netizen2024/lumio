@@ -1,8 +1,9 @@
+
 from datetime import datetime
 from typing import Optional, List
 from decimal import Decimal
 import enum
-from sqlalchemy import String, Integer, Boolean, DateTime, Text, Numeric, ForeignKey, func
+from sqlalchemy import String, Integer, Boolean, DateTime, Text, Numeric, ForeignKey, Float, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # Import Base from connection.py in the same database folder
@@ -52,14 +53,21 @@ class Retailer(Base):
     __tablename__ = "retailers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     store_name: Mapped[str] = mapped_column(String(200), nullable=False)
     address: Mapped[str] = mapped_column(Text, nullable=False)
+    store_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     contact: Mapped[str] = mapped_column(String(100), nullable=False)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    pincode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    offline_pickup_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship("User", back_populates="retailers")
     products: Mapped[List["Product"]] = relationship("Product", back_populates="retailer")
+    inventories: Mapped[List["Inventory"]] = relationship("Inventory", back_populates="retailer", cascade="all, delete-orphan")
 
 
 # ==========================================
@@ -73,11 +81,12 @@ class Address(Base):
     street: Mapped[str] = mapped_column(Text, nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     pincode: Mapped[str] = mapped_column(String(20), nullable=False)
+    latitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    longitude: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship("User", back_populates="addresses")
     orders: Mapped[List["Order"]] = relationship("Order", back_populates="address")
-
 
 # ==========================================
 # PRODUCTS TABLE
@@ -100,7 +109,7 @@ class Product(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     retailer: Mapped[Optional["Retailer"]] = relationship("Retailer", back_populates="products")
-    inventory: Mapped[Optional["Inventory"]] = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
+    inventories: Mapped[List["Inventory"]] = relationship("Inventory", back_populates="product", cascade="all, delete-orphan")
     cart_items: Mapped[List["CartItem"]] = relationship("CartItem", back_populates="product")
     order_items: Mapped[List["OrderItem"]] = relationship("OrderItem", back_populates="product")
 
@@ -112,12 +121,14 @@ class Inventory(Base):
     __tablename__ = "inventory"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, unique=True)
+    retailer_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("retailers.id", ondelete="CASCADE"), nullable=True, index=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True)
     stock_quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     reserved_quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    product: Mapped["Product"] = relationship("Product", back_populates="inventory")
+    retailer: Mapped[Optional["Retailer"]] = relationship("Retailer", back_populates="inventories")
+    product: Mapped["Product"] = relationship("Product", back_populates="inventories")
 
 
 # ==========================================
