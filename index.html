@@ -63,74 +63,74 @@
   </section>
 
   <section class="category-section">
-  <h2 class="category-heading">Explore by Category</h2>
-  <p class="category-subheading">Everything you need for your home, study, and daily lifestyle</p>
+    <h2 class="category-heading">Explore by Category</h2>
+    <p class="category-subheading">Everything you need for your home, study, and daily lifestyle</p>
 
-  <div class="category-grid">
-    <a class="category-card" href="./public/home.html">
-      <div class="category-img">
-        <img src="./assets/images/home.png" alt="Home Essentials">
-      </div>
-      <div class="category-info">
-        <div class="category-text">
-          <h3>Home Essentials</h3>
-          <p>Decor, kitchen &amp; more</p>
+    <div class="category-grid">
+      <a class="category-card" href="./public/home.html">
+        <div class="category-img">
+          <img src="./assets/images/home.png" alt="Home Essentials">
         </div>
-        <span class="category-arrow">→</span>
-      </div>
-    </a>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Home Essentials</h3>
+            <p>Decor, kitchen &amp; more</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
 
-    <a class="category-card" href="./public/groceries.html">
-      <div class="category-img">
-        <img src="./assets/images/groceries.jpg" alt="Groceries">
-      </div>
-      <div class="category-info">
-        <div class="category-text">
-          <h3>Groceries</h3>
-          <p>Fresh daily essentials</p>
+      <a class="category-card" href="./public/groceries.html">
+        <div class="category-img">
+          <img src="./assets/images/groceries.jpg" alt="Groceries">
         </div>
-        <span class="category-arrow">→</span>
-      </div>
-    </a>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Groceries</h3>
+            <p>Fresh daily essentials</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
 
-    <a class="category-card" href="./public/stationery.html">
-      <div class="category-img">
-        <img src="./assets/images/stationery.png" alt="Stationery Items">
-      </div>
-      <div class="category-info">
-        <div class="category-text">
-          <h3>Stationery Items</h3>
-          <p>Pens, notebooks &amp; desk</p>
+      <a class="category-card" href="./public/stationery.html">
+        <div class="category-img">
+          <img src="./assets/images/stationery.png" alt="Stationery Items">
         </div>
-        <span class="category-arrow">→</span>
-      </div>
-    </a>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Stationery Items</h3>
+            <p>Pens, notebooks &amp; desk</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
 
-    <a class="category-card" href="./public/pet.html">
-      <div class="category-img">
-        <img src="./assets/images/pets.png" alt="Pet Supplies">
-      </div>
-      <div class="category-info">
-        <div class="category-text">
-          <h3>Pet Supplies</h3>
-          <p>Food, care &amp; accessories</p>
+      <a class="category-card" href="./public/pet.html">
+        <div class="category-img">
+          <img src="./assets/images/pets.png" alt="Pet Supplies">
         </div>
-        <span class="category-arrow">→</span>
-      </div>
-    </a>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Pet Supplies</h3>
+            <p>Food, care &amp; accessories</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
 
-    <a class="category-card" href="./public/toys.html">
-      <div class="category-img">
-        <img src="./assets/images/toys.png" alt="Toys and Games">
-      </div>
-      <div class="category-info">
-        <div class="category-text">
-          <h3>Toys &amp; Games</h3>
-          <p>Fun, creative &amp; learning</p>
+      <a class="category-card" href="./public/toys.html">
+        <div class="category-img">
+          <img src="./assets/images/toys.png" alt="Toys and Games">
         </div>
-        <span class="category-arrow">→</span>
-      </div>
-    </a>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Toys &amp; Games</h3>
+            <p>Fun, creative &amp; learning</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
 
     <a class="category-card" href="./public/food_drinks.html">
       <div class="category-img">
@@ -140,12 +140,20 @@
         <div class="category-text">
           <h3>Food &amp; Drinks</h3>
           <p>Snacks, sips &amp; gourmet</p>
+      <a class="category-card" href="./public/food_drinks.html">
+        <div class="category-img">
+          <img src="./assets/images/food_drinks.jpg" alt="Food and Drinks">
         </div>
-        <span class="category-arrow">→</span>
-      </div>
-    </a>
-  </div>
-</section>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Food &amp; Drinks</h3>
+            <p>Snacks, sips &amp; gourmet</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
+    </div>
+  </section>
 
   <!-- Featured Products from Backend (PostgreSQL) -->
   <section class="main-content" id="featured-products" style="margin-top: 30px; margin-bottom: 80px; padding: 0 40px;">
@@ -173,6 +181,27 @@
       </div>
     </div>
   </section>
+
+  <!-- Nearest Offline Retailer Fallback Modal -->
+  <div id="lumio-nearest-retailers-modal"
+    style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.55); z-index:9999; align-items:center; justify-content:center; padding:16px;">
+    <div
+      style="background:#fff; color:#0f172a; max-width:520px; width:100%; border-radius:12px; padding:20px; box-shadow:0 20px 40px rgba(0,0,0,0.2);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <h3 id="lumio-nr-title" style="margin:0; font-size:1.1rem;">Nearby Offline Stores</h3>
+        <button type="button" id="lumio-nr-close"
+          style="border:none; background:#f1f5f9; border-radius:6px; padding:6px 10px; cursor:pointer; font-weight:600;">✕</button>
+      </div>
+      <p id="lumio-nr-status" style="margin:10px 0; font-size:0.9rem; color:#475569;"></p>
+      <div id="lumio-nr-list" style="display:flex; flex-direction:column; gap:10px; max-height:320px; overflow-y:auto;">
+      </div>
+      <div style="margin-top:14px; display:flex; justify-content:flex-end; gap:8px;">
+        <button type="button" id="lumio-nr-retry-loc"
+          style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; cursor:pointer;">Use My
+          Location</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Full-Stack Backend Integration Scripts -->
   <script src="./assets/js/api.js"></script>

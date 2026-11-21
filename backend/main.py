@@ -1,3 +1,4 @@
+import math
 import os
 import traceback
 from contextlib import asynccontextmanager
@@ -702,6 +703,83 @@ def delete_inventory(inventory_id: int, db: Session = Depends(get_db)):
     db.delete(inv)
     db.commit()
     return None
+
+EARTH_RADIUS_KM = 6371.0
+DEFAULT_BENGALURU_LAT = 12.9716
+DEFAULT_BENGALURU_LON = 77.5946
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
+    lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
+
+    dlat = lat2_rad - lat1_rad
+    dlon = lon2_rad - lon1_rad
+
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return EARTH_RADIUS_KM * c
+
+
+@app.get("/products/{product_id}/nearest-retailers", tags=["Inventory"])
+def get_nearest_retailers(
+    product_id: int,
+    lat: Optional[float] = Query(None, description="User latitude"),
+    lon: Optional[float] = Query(None, description="User longitude"),
+    db: Session = Depends(get_db),
+):
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    rows = (
+        db.query(Inventory, Retailer)
+        .join(Retailer, Inventory.retailer_id == Retailer.id)
+        .filter(
+            Inventory.product_id == product_id,
+            Inventory.stock_quantity > 0,
+            Retailer.offline_pickup_enabled.is_(True),
+            Retailer.latitude.isnot(None),
+            Retailer.longitude.isnot(None),
+        )
+        .all()
+    )
+
+    used_fallback = lat is None or lon is None
+    origin_lat = lat if lat is not None else DEFAULT_BENGALURU_LAT
+    origin_lon = lon if lon is not None else DEFAULT_BENGALURU_LON
+
+    results = []
+    for inv, retailer in rows:
+        dist_km = round(
+            _haversine_km(origin_lat, origin_lon, retailer.latitude, retailer.longitude),
+            2,
+        )
+        results.append(
+            {
+                "retailer_id": retailer.id,
+                "store_name": retailer.store_name,
+                "address": retailer.address,
+                "city": retailer.city,
+                "pincode": retailer.pincode,
+                "contact": retailer.contact,
+                "stock_quantity": inv.stock_quantity,
+                "distance_km": dist_km,
+            }
+        )
+
+    results.sort(key=lambda item: item["distance_km"])
+
+    return {
+        "product_id": product.id,
+        "product_name": product.name,
+        "online_stock_quantity": product.stock_quantity,
+        "location_fallback": used_fallback,
+        "retailers": results,
+    }
 
 
 # ==========================================

@@ -49,13 +49,25 @@ class RetailerCreate(BaseModel):
     user_id: int
     store_name: str
     address: str
+    store_address: Optional[str] = None
     contact: str
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    offline_pickup_enabled: bool = True
 
 
 class RetailerUpdate(BaseModel):
     store_name: Optional[str] = None
     address: Optional[str] = None
+    store_address: Optional[str] = None
     contact: Optional[str] = None
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    offline_pickup_enabled: Optional[bool] = None
 
 
 class RetailerResponse(BaseModel):
@@ -63,7 +75,13 @@ class RetailerResponse(BaseModel):
     user_id: int
     store_name: str
     address: str
+    store_address: Optional[str] = None
     contact: str
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    offline_pickup_enabled: bool = True
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -77,12 +95,16 @@ class AddressCreate(BaseModel):
     street: str
     city: str
     pincode: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class AddressUpdate(BaseModel):
     street: Optional[str] = None
     city: Optional[str] = None
     pincode: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class AddressResponse(BaseModel):
@@ -91,10 +113,38 @@ class AddressResponse(BaseModel):
     street: str
     city: str
     pincode: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
+
+# ==========================================================
+# INVENTORY SCHEMAS
+# ==========================================================
+class InventoryCreate(BaseModel):
+    retailer_id: Optional[int] = None
+    product_id: int
+    stock_quantity: int = 0
+    reserved_quantity: int = 0
+
+
+class InventoryUpdate(BaseModel):
+    retailer_id: Optional[int] = None
+    stock_quantity: Optional[int] = None
+    reserved_quantity: Optional[int] = None
+
+
+class InventoryResponse(BaseModel):
+    id: int
+    retailer_id: Optional[int] = None
+    product_id: int
+    stock_quantity: int
+    reserved_quantity: int
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 # ==========================================================
 # PRODUCT SCHEMAS
@@ -141,31 +191,6 @@ class ProductResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-# ==========================================================
-# INVENTORY SCHEMAS
-# ==========================================================
-class InventoryCreate(BaseModel):
-    product_id: int
-    stock_quantity: int = 0
-    reserved_quantity: int = 0
-
-
-class InventoryUpdate(BaseModel):
-    stock_quantity: Optional[int] = None
-    reserved_quantity: Optional[int] = None
-
-
-class InventoryResponse(BaseModel):
-    id: int
-    product_id: int
-    stock_quantity: int
-    reserved_quantity: int
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
 
 # ==========================================================
 # CART SCHEMAS
@@ -234,3 +259,24 @@ class OrderResponse(BaseModel):
     items: List[OrderItemResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+# ==========================================================
+# NEAREST RETAILER SCHEMAS
+# ==========================================================
+class NearestRetailerItem(BaseModel):
+    retailer_id: int
+    store_name: str
+    address: str
+    city: Optional[str] = None
+    pincode: Optional[str] = None
+    contact: str
+    stock_quantity: int
+    distance_km: float
+
+
+class NearestRetailersResponse(BaseModel):
+    product_id: int
+    product_name: str
+    online_stock_quantity: int
+    location_fallback: bool
+    retailers: List[NearestRetailerItem] = []
