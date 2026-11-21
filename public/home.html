@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUMIO - Home Essentials</title>
+    <link rel="stylesheet" href="../public/home.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="header">
+        <svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#3C1A8D"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 11V7a4 4 0 0 0-8 0v4M5 9h14l1 12H4L5 9z" />
+        </svg><span>
+            <a href="../index.html">
+                <h1>LUMIO</h1>
+            </a>
+        </span>
+
+        <ul class="links">
+            <li class="links"><a href="../index.html">Home</a></li>
+            <li class="links"><a href="#">Shop</a></li>
+            <li class="links"><a href="./categories.html">Categories</a></li>
+            <li class="links"><a href="./about.html">About</a></li>
+
+            <div class="icons">
+                <li>
+                    <a href="./public/cart.html"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"
+                            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg></a>
+                </li>
+                <li>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </li>
+            </div>
+
+        </ul>
+    </div>
+
+    <!-- HERO BANNER -->
+    <section class="banner-section">
+        <div class="banner-inner">
+            <h1>Home Essentials</h1>
+            <p>Everything you need to make<br>your house feel like home.</p>
+            <a href="#products-section" class="banner-cta">Shop Now &rarr;</a>
+        </div>
+    </section>
+
+    <!-- MAIN CONTENT -->
+    <main class="content-wrapper" id="products-section">
+
+        <!-- Section Title -->
+        <div class="title-divider">
+            <div class="line"></div>
+            <h2>Popular Home Essentials</h2>
+            <div class="line"></div>
+        </div>
+
+        <!-- Filter & Sort Controls -->
+        <div class="filter-bar">
+            <div class="filter-item">
+                <label for="sort-select">Sort by:</label>
+                <select id="sort-select">
+                    <option>Popularity</option>
+                    <option>Price: Low to High</option>
+                    <option>Price: High to Low</option>
+                    <option>Rating</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label for="price-select">Filter by Price:</label>
+                <select id="price-select">
+                    <option>All</option>
+                    <option>Under ₹500</option>
+                    <option>₹500 - ₹1,000</option>
+                    <option>Above ₹1,000</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Product Cards Grid (4 columns x 2 rows) -->
+        <div class="catalog-grid">
+
+            <!-- 1. Cookware Set -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/cookware.jpg" alt="Cookware Set">
+                </div>
+                <div class="card-info">
+                    <h3>Cookware Set</h3>
+                    <div class="price">₹1,499</div>
+                    <span class="badge in-stock">In Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.6</span>
+                        <span class="count">(120 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. LED Desk Lamp -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/lamp.jpg" alt="LED Desk Lamp">
+                </div>
+                <div class="card-info">
+                    <h3>LED Desk Lamp</h3>
+                    <div class="price">₹799</div>
+                    <span class="badge in-stock">In Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.7</span>
+                        <span class="count">(98 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. Ceramic Vase -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/vase.jpg" alt="Ceramic Vase">
+                </div>
+                <div class="card-info">
+                    <h3>Ceramic Vase</h3>
+                    <div class="price">₹499</div>
+                    <span class="badge in-stock">In Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.5</span>
+                        <span class="count">(76 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4. Cotton Towels (Set of 2) -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/towels.jpg" alt="Cotton Towels">
+                </div>
+                <div class="card-info">
+                    <h3>Cotton Towels (Set of 2)</h3>
+                    <div class="price">₹699</div>
+                    <span class="badge in-stock">In Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.6</span>
+                        <span class="count">(64 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+            <!-- 5. Storage Box -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/storage.jpg" alt="Storage Box">
+                </div>
+                <div class="card-info">
+                    <h3>Storage Box</h3>
+                    <div class="price">₹299</div>
+                    <span class="badge in-stock">In Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.4</span>
+                        <span class="count">(52 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+            <!-- 6. Cotton Bedsheet -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/bedsheet.jpg" alt="Cotton Bedsheet">
+                </div>
+                <div class="card-info">
+                    <h3>Cotton Bedsheet</h3>
+                    <div class="price">₹899</div>
+                    <span class="badge in-stock">In Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.5</span>
+                        <span class="count">(90 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+            <!-- 7. Multipurpose Cleaner -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/cleaner.jpg" alt="Multipurpose Cleaner">
+                </div>
+                <div class="card-info">
+                    <h3>Multipurpose Cleaner</h3>
+                    <div class="price">₹349</div>
+                    <span class="badge in-stock">In Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.3</span>
+                        <span class="count">(47 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+            <!-- 8. Electric Kettle -->
+            <div class="card">
+                <div class="card-media">
+                    <img src="../assets/images/kettle.jpg" alt="Electric Kettle">
+                </div>
+                <div class="card-info">
+                    <h3>Electric Kettle</h3>
+                    <div class="price">₹1,299</div>
+                    <span class="badge low-stock">Low Stock</span>
+                    <div class="rating">
+                        <span class="star">&#9733;</span>
+                        <span class="score">4.7</span>
+                        <span class="count">(72 reviews)</span>
+                    </div>
+                    <button class="cart-btn" type="button">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                        </svg>
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Promotional Banner Strip -->
+        <div class="promo-banner">
+            <div class="promo-left">
+                <div class="promo-icon">
+                    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1V9.5z" />
+                    </svg>
+                </div>
+                <div class="promo-text">
+                    <h4>Make Every Corner Special!</h4>
+                    <p>Discover useful products for your everyday needs.</p>
+                </div>
+            </div>
+            <a href="#" class="promo-cta">Shop Now &rarr;</a>
+        </div>
+
+    </main>
+
+
+</body>
+
+</html>

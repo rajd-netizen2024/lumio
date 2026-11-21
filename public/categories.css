@@ -1,0 +1,73 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    background-color: ghostwhite;
+    font-family: 'Poppins','sans-serif';
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 40px;
+  /* 40px provides padding on left & right */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Brand Logo & Name */
+.header>svg,
+svg {
+  display: block;
+  margin: 0;
+}
+
+h1 {
+  /* margin: 0 0 0 10px; */
+  font-size: 1.8rem;
+  line-height: 1;
+  /* font-family: "Inter", sans-serif; */
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-style: normal;
+  color: #2A0878;
+}
+
+/* Nav Links */
+.links {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 60px;
+  margin: 0 auto;
+  /* keeps links centered */
+  padding: 0;
+  /* font-size: 25px; */
+  /* font-family: "Inter", sans-serif; */
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  font-size: 20px;
+}
+
+.links li {
+  text-decoration: none;
+  position: relative;
+}
+
+/* Icons on the far right with a gap */
+.icons {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  margin-left: 400px;
+  /* pushes icons all the way to the right */
+  margin-right: 0px;
+  /* adjust this value to increase/decrease gap from the right */
+}
+
+a {
+  text-decoration: none;
+  color: black;
+}
