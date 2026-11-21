@@ -11,7 +11,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import text
+from sqlalchemy import text,or_
+from services.search import (
+    search_products_opensearch,
+    index_product_document,
+    bulk_index_products,
+    delete_product_document,
+)
 
 # Database, Model & Schema imports
 from database.connection import test_connection, engine, get_db, SessionLocal, Base
@@ -502,6 +508,23 @@ def delete_address(address_id: int, db: Session = Depends(get_db)):
 # ==========================================
 # 4. PRODUCT ENDPOINTS
 # ==========================================
+def _product_to_search_doc(product: Product) -> dict:
+    return {
+        "id": product.id,
+        "retailer_id": product.retailer_id,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price) if product.price is not None else None,
+        "original_price": float(product.original_price) if product.original_price is not None else None,
+        "category": product.category,
+        "brand": product.brand,
+        "image_url": product.image_url,
+        "stock_quantity": product.stock_quantity,
+        "is_available": bool(product.is_available),
+        "created_at": product.created_at.isoformat() if product.created_at else None,
+        "updated_at": product.updated_at.isoformat() if product.updated_at else None,
+    }
+
 
 @app.post("/products/seed", tags=["Products"])
 def seed_products_endpoint(db: Session = Depends(get_db)):
@@ -531,31 +554,42 @@ def create_product(product_in: ProductCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/products/", response_model=List[ProductResponse], tags=["Products"])
-def get_all_products(
-    category: Optional[str] = Query(None, description="Filter by category"),
-    brand: Optional[str] = Query(None, description="Filter by brand"),
-    retailer_id: Optional[int] = Query(None, description="Filter by retailer ID"),
-    is_available: Optional[bool] = Query(None, description="Filter by availability"),
-    search: Optional[str] = Query(None, description="Search by name or description"),
-    skip: int = 0,
-    limit: int = 100,
+def list_products(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    brand: Optional[str] = None,
+    retailer_id: Optional[int] = None,
+    is_available: Optional[bool] = None,
     db: Session = Depends(get_db),
 ):
+    opensearch_results = search_products_opensearch(
+        query=q,
+        category=category,
+        brand=brand,
+        retailer_id=retailer_id,
+        is_available=is_available,
+    )
+    if opensearch_results is not None:
+        return opensearch_results
+
     query = db.query(Product)
     if category:
-        query = query.filter(Product.category.ilike(f"%{category}%"))
+        query = query.filter(Product.category == category)
     if brand:
-        query = query.filter(Product.brand.ilike(f"%{brand}%"))
-    if retailer_id:
+        query = query.filter(Product.brand == brand)
+    if retailer_id is not None:
         query = query.filter(Product.retailer_id == retailer_id)
     if is_available is not None:
         query = query.filter(Product.is_available == is_available)
-    if search:
+    if q and q.strip():
+        pattern = f"%{q.strip()}%"
         query = query.filter(
-            (Product.name.ilike(f"%{search}%")) | (Product.description.ilike(f"%{search}%"))
+            or_(
+                Product.name.ilike(pattern),
+                Product.description.ilike(pattern),
+            )
         )
-    return query.offset(skip).limit(limit).all()
-
+    return query.all()
 
 @app.get("/products/{product_id}", response_model=ProductResponse, tags=["Products"])
 def get_product_by_id(product_id: int, db: Session = Depends(get_db)):
