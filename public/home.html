@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LUMIO - Home Essentials</title>
     <link rel="stylesheet" href="../public/home.css">
+    <link rel="stylesheet" href="../assets/css/lumio-integration.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -32,7 +33,7 @@
 
             <div class="icons">
                 <li>
-                    <a href="./public/cart.html"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"
+                    <a href="./cart.html"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"
                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                             stroke-linecap="round" stroke-linejoin="round">
                             <path
@@ -66,7 +67,7 @@
         <!-- Section Title -->
         <div class="title-divider">
             <div class="line"></div>
-            <h2>Popular Home Essentials</h2>
+            <h2 id="category-display-title">Popular Home Essentials</h2>
             <div class="line"></div>
         </div>
 
@@ -92,209 +93,12 @@
             </div>
         </div>
 
-        <!-- Product Cards Grid (4 columns x 2 rows) -->
-        <div class="catalog-grid">
-
-            <!-- 1. Cookware Set -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/cookware.jpg" alt="Cookware Set">
-                </div>
-                <div class="card-info">
-                    <h3>Cookware Set</h3>
-                    <div class="price">₹1,499</div>
-                    <span class="badge in-stock">In Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.6</span>
-                        <span class="count">(120 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
+        <!-- Product Cards Grid (Populated dynamically from FastAPI backend) -->
+        <div class="catalog-grid" id="catalog-grid" data-category="Home Essentials">
+            <div class="lumio-loading-spinner">
+                <div class="lumio-spinner-circle"></div>
+                <span>Loading products from database...</span>
             </div>
-
-            <!-- 2. LED Desk Lamp -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/lamp.jpg" alt="LED Desk Lamp">
-                </div>
-                <div class="card-info">
-                    <h3>LED Desk Lamp</h3>
-                    <div class="price">₹799</div>
-                    <span class="badge in-stock">In Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.7</span>
-                        <span class="count">(98 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
-            <!-- 3. Ceramic Vase -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/vase.jpg" alt="Ceramic Vase">
-                </div>
-                <div class="card-info">
-                    <h3>Ceramic Vase</h3>
-                    <div class="price">₹499</div>
-                    <span class="badge in-stock">In Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.5</span>
-                        <span class="count">(76 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
-            <!-- 4. Cotton Towels (Set of 2) -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/towels.jpg" alt="Cotton Towels">
-                </div>
-                <div class="card-info">
-                    <h3>Cotton Towels (Set of 2)</h3>
-                    <div class="price">₹699</div>
-                    <span class="badge in-stock">In Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.6</span>
-                        <span class="count">(64 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
-            <!-- 5. Storage Box -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/storage.jpg" alt="Storage Box">
-                </div>
-                <div class="card-info">
-                    <h3>Storage Box</h3>
-                    <div class="price">₹299</div>
-                    <span class="badge in-stock">In Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.4</span>
-                        <span class="count">(52 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
-            <!-- 6. Cotton Bedsheet -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/bedsheet.jpg" alt="Cotton Bedsheet">
-                </div>
-                <div class="card-info">
-                    <h3>Cotton Bedsheet</h3>
-                    <div class="price">₹899</div>
-                    <span class="badge in-stock">In Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.5</span>
-                        <span class="count">(90 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
-            <!-- 7. Multipurpose Cleaner -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/cleaner.jpg" alt="Multipurpose Cleaner">
-                </div>
-                <div class="card-info">
-                    <h3>Multipurpose Cleaner</h3>
-                    <div class="price">₹349</div>
-                    <span class="badge in-stock">In Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.3</span>
-                        <span class="count">(47 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
-            <!-- 8. Electric Kettle -->
-            <div class="card">
-                <div class="card-media">
-                    <img src="../assets/images/kettle.jpg" alt="Electric Kettle">
-                </div>
-                <div class="card-info">
-                    <h3>Electric Kettle</h3>
-                    <div class="price">₹1,299</div>
-                    <span class="badge low-stock">Low Stock</span>
-                    <div class="rating">
-                        <span class="star">&#9733;</span>
-                        <span class="score">4.7</span>
-                        <span class="count">(72 reviews)</span>
-                    </div>
-                    <button class="cart-btn" type="button">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.29 2.29A1 1 0 0 0 5.4 17H17m0 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-8 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-                        </svg>
-                        Add to Cart
-                    </button>
-                </div>
-            </div>
-
         </div>
 
         <!-- Promotional Banner Strip -->
@@ -315,7 +119,10 @@
 
     </main>
 
-
+    <!-- Full-Stack Backend Integration Scripts -->
+    <script src="../assets/js/api.js"></script>
+    <script src="../assets/js/lumio-ui.js"></script>
+    <script src="../assets/js/catalog.js"></script>
 </body>
 
 </html>

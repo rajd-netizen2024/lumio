@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LUMIO</title>
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./assets/css/lumio-integration.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -24,7 +25,7 @@
 
     <ul class="links">
       <li class="links"><a href="./index.html">Home</a></li>
-      <li class="links"><a href="#">Shop</a></li>
+      <li class="links"><a href="#featured-products">Shop</a></li>
       <li class="links"><a href="./public/categories.html">Categories</a></li>
       <li class="links"><a href="./public/about.html">About</a></li>
 
@@ -53,7 +54,7 @@
     <h1>WELCOME TO LUMIO</h1>
     <h2>Find It. Love It. Own It.</h2>
     <br>
-    <a id="shop-now" href="./index.html">Shop Now</a>
+    <a id="shop-now" href="#featured-products">Shop Now</a>
     <br>
     <a id="categories" href="./public/categories.html">Explore Categories</a>
 
@@ -88,6 +89,25 @@
       </div>
     </div>
   </section>
+
+  <!-- Featured Products from Backend (PostgreSQL) -->
+  <section class="main-content" id="featured-products" style="margin-top: 30px; margin-bottom: 80px; padding: 0 40px;">
+    <h1>Featured Products</h1>
+    <p style="text-align: center; color: #64748b; font-size: 1rem; margin-top: -10px; margin-bottom: 35px;">
+      Explore our live cloud catalog powered by FastAPI & PostgreSQL
+    </p>
+    <div class="catalog-grid" id="catalog-grid" data-category="All">
+      <div class="lumio-loading-spinner">
+        <div class="lumio-spinner-circle"></div>
+        <span>Loading products from database...</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Full-Stack Backend Integration Scripts -->
+  <script src="./assets/js/api.js"></script>
+  <script src="./assets/js/lumio-ui.js"></script>
+  <script src="./assets/js/catalog.js"></script>
 </body>
 
 </html>

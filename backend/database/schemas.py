@@ -8,6 +8,10 @@ from database.models import UserRole
 
 
 # ----------------- User Schemas -----------------
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
 class UserCreate(BaseModel):
     full_name: str
     email: EmailStr
