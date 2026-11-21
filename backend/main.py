@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+from kafka_service.producer import send_order_event
 import math
 import os
 import traceback
@@ -1136,58 +1139,155 @@ def _fetch_order(db: Session, order_id: int) -> Optional[Order]:
     )
 
 
-@app.post("/orders/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED, tags=["Orders"])
+
+@app.post(
+    "/orders/",
+    response_model=OrderResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Orders"]
+)
 def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
-    """Turn the user's cart into an order, reduce stock, then empty the cart (one transaction)."""
+    """
+    Turn the user's cart into an order, reduce stock,
+    empty the cart and publish an order event to Kafka.
+    """
+
     _require_user(db, order_in.user_id)
 
     if order_in.address_id is not None:
-        address = db.query(Address).filter(Address.id == order_in.address_id).first()
+        address = db.query(Address).filter(
+            Address.id == order_in.address_id
+        ).first()
+
         if not address or address.user_id != order_in.user_id:
-            raise HTTPException(status_code=404, detail="Address not found")
+            raise HTTPException(
+                status_code=404,
+                detail="Address not found"
+            )
 
     cart = _get_cart(db, order_in.user_id)
-    if not cart.items:
-        raise HTTPException(status_code=400, detail="Your cart is empty")
 
-    # Lock the product rows so two checkouts can't both take the last unit.
+    if not cart.items:
+        raise HTTPException(
+            status_code=400,
+            detail="Your cart is empty"
+        )
+
+    # Lock product rows to prevent simultaneous checkouts
+    # from taking the same remaining stock.
+
     product_ids = [i.product_id for i in cart.items]
+
     products = {
         p.id: p
-        for p in db.query(Product).filter(Product.id.in_(product_ids)).with_for_update().all()
+        for p in db.query(Product)
+        .filter(Product.id.in_(product_ids))
+        .with_for_update()
+        .all()
     }
 
     subtotal = Decimal("0")
     lines = []
+
     for item in cart.items:
+
         product = products.get(item.product_id)
+
         if product is None:
-            raise HTTPException(status_code=409, detail="A product in your cart no longer exists")
+            raise HTTPException(
+                status_code=409,
+                detail="A product in your cart no longer exists"
+            )
+
         _check_stock(product, item.quantity)
+
         subtotal += product.price * item.quantity
+
         lines.append((product, item.quantity))
 
-    tax = (subtotal * GST_RATE).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    # Calculate GST
+    tax = (subtotal * GST_RATE).quantize(
+        Decimal("1"),
+        rounding=ROUND_HALF_UP
+    )
+
+    # Create order
     order = Order(
         user_id=order_in.user_id,
         address_id=order_in.address_id,
         total_amount=subtotal + tax,
         status=OrderStatus.PENDING.value,
     )
-    db.add(order)
-    db.flush()  # get order.id
 
+    db.add(order)
+    db.flush()
+
+    # Create order items and reduce online stock
     for product, qty in lines:
-        db.add(OrderItem(order_id=order.id, product_id=product.id, quantity=qty, unit_price=product.price))
-        # Online orders only reduce ONLINE stock (products.stock_quantity).
-        # `inventory` rows are per-store offline shelf stock and are not touched here.
+
+        db.add(
+            OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                quantity=qty,
+                unit_price=product.price
+            )
+        )
+
         product.stock_quantity -= qty
 
+    # Empty cart
     for item in list(cart.items):
         db.delete(item)
 
+    # Prepare Kafka event BEFORE committing.
+    # Decimal values are converted to strings for JSON serialization.
+
+    order_event = {
+        "event": "order_created",
+        "order_id": order.id,
+        "user_id": order.user_id,
+        "total_amount": str(order.total_amount),
+        "status": order.status,
+        "items": [
+            {
+                "product_id": product.id,
+                "quantity": qty,
+                "unit_price": str(product.price)
+            }
+            for product, qty in lines
+        ]
+    }
+
+    # Commit PostgreSQL transaction FIRST.
     db.commit()
-    reindex_products([p for p, _ in lines])  # so search results show the new stock / sold-out state
+
+    logger.info(
+        "Order %s successfully saved in PostgreSQL",
+        order.id
+    )
+
+    # Publish order event to Kafka AFTER successful DB commit.
+    # Kafka failure must not undo an already saved order.
+
+    try:
+        send_order_event(order_event)
+
+        logger.info(
+            "Order event successfully published to Kafka: %s",
+            order.id
+        )
+
+    except Exception:
+        logger.exception(
+            "Kafka publishing failed for order: %s",
+            order.id
+        )
+
+    # Update OpenSearch stock information
+    reindex_products([p for p, _ in lines])
+
+    # Return the saved order
     return _fetch_order(db, order.id)
 
 
