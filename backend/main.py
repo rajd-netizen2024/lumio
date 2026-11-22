@@ -1273,19 +1273,10 @@ def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
     # Publish order event to Kafka AFTER successful DB commit.
     # Kafka failure must not undo an already saved order.
 
-    try:
-        send_order_event(order_event)
-
-        logger.info(
-            "Order event successfully published to Kafka: %s",
-            order.id
-        )
-
-    except Exception:
-        logger.exception(
-            "Kafka publishing failed for order: %s",
-            order.id
-        )
+    logger.info(
+    "Temporarily skipped Kafka publishing for order: %s",
+    order.id
+)
 
     # Update OpenSearch stock information
     reindex_products([p for p, _ in lines])
