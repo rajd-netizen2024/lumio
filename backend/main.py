@@ -363,7 +363,10 @@ app = FastAPI(title="LUMIO Backend", lifespan=lifespan)
 # CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5500",
+        "https://lumio-wl42.vercel.app/"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
