@@ -13,7 +13,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 # Locate CA certificate
-CA_PATH = BASE_DIR / os.getenv("KAFKA_CA_PATH", "certs/ca.pem")
+CA_PATH = BASE_DIR / os.getenv(
+    "KAFKA_CA_LOCATION", "certs/ca.pem"
+)
 
 # Producer is initialized only when needed
 producer = None
