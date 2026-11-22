@@ -1265,28 +1265,29 @@ def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
     # Commit PostgreSQL transaction FIRST.
     db.commit()
 
-    logger.info("DEBUG: About to publish order %s to Kafka", order.id)
+    
+    logger.info("About to publish order %s to Kafka", order.id)
 
     try:
         send_order_event(order_event)
-
-        logger.info("DEBUG: Order event queued for Kafka: %s", order.id)
+        logger.info("Order event queued for Kafka: %s", order.id)
 
     except Exception:
-        logger.exception("DEBUG: Kafka publishing failed for order: %s", order.id)
-        # Publish order event to Kafka AFTER successful DB commit.
-        # Kafka failure must not undo an already saved order.
-
-        logger.info(
-        "Temporarily skipped Kafka publishing for order: %s",
-        order.id
+        logger.exception(
+            "Kafka publishing failed for order: %s", order.id
         )
 
-        # Update OpenSearch stock information
+    # Update OpenSearch regardless of whether Kafka publishing succeeds.
+    try:
         reindex_products([p for p, _ in lines])
+    except Exception:
+        logger.exception(
+            "OpenSearch reindex failed after order: %s", order.id
+        )
 
-        # Return the saved order
-        return _fetch_order(db, order.id)
+    # Always return the saved order.
+    return _fetch_order(db, order.id)
+
 
 
 @app.get("/orders/", response_model=List[OrderResponse], tags=["Orders"])
