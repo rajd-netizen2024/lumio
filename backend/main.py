@@ -1265,10 +1265,19 @@ def create_order(order_in: OrderCreate, db: Session = Depends(get_db)):
     # Commit PostgreSQL transaction FIRST.
     db.commit()
 
-    logger.info(
-        "Order %s successfully saved in PostgreSQL",
-        order.id
-    )
+    try:
+        send_order_event(order_event)
+
+        logger.info(
+            "Order event successfully published to Kafka: %s",
+            order.id
+        )
+
+    except Exception:
+        logger.exception(
+        "   Kafka publishing failed for order: %s",
+            order.id
+        )
 
     # Publish order event to Kafka AFTER successful DB commit.
     # Kafka failure must not undo an already saved order.
