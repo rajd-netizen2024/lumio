@@ -50,48 +50,88 @@
     </ul>
   </div>
 
-  <section class="main-content" style="padding-top: 30px;">
-    <h1>All Categories</h1>
-    <p style="text-align: center; color: #64748b; font-size: 1.05rem; margin-top: -10px; margin-bottom: 30px;">
-      Choose a department to browse live inventory
-    </p>
+  <section class="category-section">
+    <h2 class="category-heading">Explore by Category</h2>
+    <p class="category-subheading">Everything you need for your home, study, and daily lifestyle</p>
 
-    <div class="rows">
-      <div class="home">
-        <h2>Home Essentials</h2>
-        <a href="./home.html?category=Home Essentials"><img src="../assets/images/home.png" alt="Home Essentials"></a>
-      </div>
-      <div class="groceries">
-        <h2>Groceries</h2>
-        <a href="./home.html?category=Groceries"><img src="../assets/images/groceries.jpg" alt="Groceries"></a>
-      </div>
-      <div class="stationery">
-        <h2>Stationery Items</h2>
-        <a href="./home.html?category=Stationery Items"><img src="../assets/images/stationery.png" alt="Stationery Items"></a>
-      </div>
-      <div class="pet">
-        <h2>Pet Supplies</h2>
-        <a href="./home.html?category=Pet Supplies"><img src="../assets/images/pets.png" alt="Pet Supplies"></a>
-      </div>
-      <div class="toys">
-        <h2>Toys</h2>
-        <a href="./home.html?category=Toys"><img src="../assets/images/toys.png" alt="Toys"></a>
-      </div>
-      <div class="food_drinks">
-        <h2>Food and Drinks</h2>
-        <a href="./home.html?category=Food and Drinks"><img src="../assets/images/food_drinks.jpg" alt="Food and Drinks"></a>
-      </div>
-    </div>
-  </section>
+    <div class="category-grid">
+      <a class="category-card" href="./home.html">
+        <div class="category-img">
+          <img src="../assets/images/home.png" alt="Home Essentials">
+        </div>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Home Essentials</h3>
+            <p>Decor, kitchen &amp; more</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
 
-  <!-- Live Category Products Section -->
-  <section class="main-content" style="max-width: 1320px; margin: 40px auto 80px auto; padding: 0 30px;">
-    <h1 style="font-size: 2rem;">Products in Database</h1>
-    <div class="catalog-grid" id="catalog-grid" data-category="All" style="margin-top: 25px;">
-      <div class="lumio-loading-spinner">
-        <div class="lumio-spinner-circle"></div>
-        <span>Loading products from database...</span>
-      </div>
+      <a class="category-card" href="./groceries.html">
+        <div class="category-img">
+          <img src="../assets/images/groceries.jpg" alt="Groceries">
+        </div>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Groceries</h3>
+            <p>Fresh daily essentials</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
+
+      <a class="category-card" href="./stationery.html">
+        <div class="category-img">
+          <img src="../assets/images/stationery.png" alt="Stationery Items">
+        </div>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Stationery Items</h3>
+            <p>Pens, notebooks &amp; desk</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
+
+      <a class="category-card" href="./pet.html">
+        <div class="category-img">
+          <img src="../assets/images/pets.png" alt="Pet Supplies">
+        </div>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Pet Supplies</h3>
+            <p>Food, care &amp; accessories</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
+
+      <a class="category-card" href="./toys.html">
+        <div class="category-img">
+          <img src="../assets/images/toys.png" alt="Toys and Games">
+        </div>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Toys &amp; Games</h3>
+            <p>Fun, creative &amp; learning</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
+
+      <a class="category-card" href="./food_drinks.html">
+        <div class="category-img">
+          <img src="../assets/images/food_drinks.jpg" alt="Food and Drinks">
+        </div>
+        <div class="category-info">
+          <div class="category-text">
+            <h3>Food &amp; Drinks</h3>
+            <p>Snacks, sips &amp; gourmet</p>
+          </div>
+          <span class="category-arrow">→</span>
+        </div>
+      </a>
     </div>
   </section>
 
