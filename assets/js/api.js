@@ -5,7 +5,7 @@
 
   const API_BASE_URL = isBackendOrigin
     ? window.location.origin
-    : "http://127.0.0.1:8000";
+    : "https://lumio-backend-dseu.onrender.com";
 
   let allProducts = [];
   let currentCategory = "All";
