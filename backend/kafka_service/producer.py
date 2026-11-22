@@ -15,25 +15,33 @@ load_dotenv(BASE_DIR / ".env")
 # Locate CA certificate
 CA_PATH = BASE_DIR / os.getenv("KAFKA_CA_PATH", "certs/ca.pem")
 
-# Create Kafka producer
-producer = KafkaProducer(
-    bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS"),
-    security_protocol="SASL_SSL",
+# Producer is initialized only when needed
+producer = None
 
-    # Confirm this mechanism in Aiven
-    sasl_mechanism="SCRAM-SHA-256",
 
-    sasl_plain_username=os.getenv("KAFKA_USERNAME"),
-    sasl_plain_password=os.getenv("KAFKA_PASSWORD"),
+def get_producer():
+    global producer
 
-    ssl_cafile=str(CA_PATH),
+    if producer is None:
+        producer = KafkaProducer(
+            bootstrap_servers=os.getenv("KAFKA_BOOTSTRAP_SERVERS"),
+            security_protocol="SASL_SSL",
+            sasl_mechanism="SCRAM-SHA-256",
+            sasl_plain_username=os.getenv("KAFKA_USERNAME"),
+            sasl_plain_password=os.getenv("KAFKA_PASSWORD"),
+            ssl_cafile=str(CA_PATH),
+            value_serializer=lambda value: json.dumps(value).encode("utf-8")
+        )
 
-    value_serializer=lambda value: json.dumps(value).encode("utf-8")
-)
+    return producer
 
-def send_order_event(order_data):
-    producer.send(
+
+def send_order_event(event):
+    kafka_producer = get_producer()
+
+    future = kafka_producer.send(
         os.getenv("KAFKA_TOPIC", "order-events"),
-        value=order_data
+        value=event
     )
-    producer.flush()
+
+    future.get(timeout=10)
